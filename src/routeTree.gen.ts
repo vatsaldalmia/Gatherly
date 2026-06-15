@@ -13,7 +13,9 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppMeetupsRouteImport } from './routes/_app.meetups'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
+import { Route as AppMeetupsCreateRouteImport } from './routes/_app.meetups.create'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -34,10 +36,20 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppMeetupsRoute = AppMeetupsRouteImport.update({
+  id: '/meetups',
+  path: '/meetups',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
   getParentRoute: () => AppRoute,
+} as any)
+const AppMeetupsCreateRoute = AppMeetupsCreateRouteImport.update({
+  id: '/create',
+  path: '/create',
+  getParentRoute: () => AppMeetupsRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -45,12 +57,16 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/dashboard': typeof AppDashboardRoute
+  '/meetups': typeof AppMeetupsRouteWithChildren
+  '/meetups/create': typeof AppMeetupsCreateRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/dashboard': typeof AppDashboardRoute
+  '/meetups': typeof AppMeetupsRouteWithChildren
+  '/meetups/create': typeof AppMeetupsCreateRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -59,13 +75,29 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/meetups': typeof AppMeetupsRouteWithChildren
+  '/_app/meetups/create': typeof AppMeetupsCreateRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/signup' | '/dashboard'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/signup'
+    | '/dashboard'
+    | '/meetups'
+    | '/meetups/create'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/signup' | '/dashboard'
-  id: '__root__' | '/' | '/_app' | '/login' | '/signup' | '/_app/dashboard'
+  to: '/' | '/login' | '/signup' | '/dashboard' | '/meetups' | '/meetups/create'
+  id:
+    | '__root__'
+    | '/'
+    | '/_app'
+    | '/login'
+    | '/signup'
+    | '/_app/dashboard'
+    | '/_app/meetups'
+    | '/_app/meetups/create'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -105,6 +137,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/meetups': {
+      id: '/_app/meetups'
+      path: '/meetups'
+      fullPath: '/meetups'
+      preLoaderRoute: typeof AppMeetupsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/dashboard': {
       id: '/_app/dashboard'
       path: '/dashboard'
@@ -112,15 +151,36 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDashboardRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/meetups/create': {
+      id: '/_app/meetups/create'
+      path: '/create'
+      fullPath: '/meetups/create'
+      preLoaderRoute: typeof AppMeetupsCreateRouteImport
+      parentRoute: typeof AppMeetupsRoute
+    }
   }
 }
 
+interface AppMeetupsRouteChildren {
+  AppMeetupsCreateRoute: typeof AppMeetupsCreateRoute
+}
+
+const AppMeetupsRouteChildren: AppMeetupsRouteChildren = {
+  AppMeetupsCreateRoute: AppMeetupsCreateRoute,
+}
+
+const AppMeetupsRouteWithChildren = AppMeetupsRoute._addFileChildren(
+  AppMeetupsRouteChildren,
+)
+
 interface AppRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
+  AppMeetupsRoute: typeof AppMeetupsRouteWithChildren
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
+  AppMeetupsRoute: AppMeetupsRouteWithChildren,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
@@ -134,3 +194,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
