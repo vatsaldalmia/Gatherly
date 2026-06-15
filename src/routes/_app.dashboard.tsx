@@ -1,3 +1,4 @@
+import { lazy, Suspense, useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import {
@@ -16,6 +17,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FairnessScore } from "@/components/fairness-score";
 import { meetups, venues } from "@/lib/dummy-data";
+
+const TestMap = lazy(() => import("@/components/TestMap"));
 
 export const Route = createFileRoute("/_app/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — Gatherly" }] }),
@@ -159,6 +162,8 @@ function Dashboard() {
           </section>
         </div>
 
+        <DashboardMap />
+
         <section className="rounded-2xl border border-border bg-card shadow-card">
           <div className="p-5 sm:p-6 border-b border-border flex items-center justify-between">
             <div>
@@ -188,5 +193,35 @@ function Dashboard() {
         </section>
       </main>
     </>
+  );
+}
+
+function DashboardMap() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return (
+    <section className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
+      <div className="p-5 sm:p-6 border-b border-border">
+        <h3 className="text-lg font-semibold">Meetup map</h3>
+        <p className="text-sm text-muted-foreground">See where your group is gathering.</p>
+      </div>
+      {mounted ? (
+        <Suspense
+          fallback={
+            <div className="h-[600px] grid place-items-center text-sm text-muted-foreground">
+              Loading map…
+            </div>
+          }
+        >
+          <TestMap />
+        </Suspense>
+      ) : (
+        <div className="h-[600px] bg-muted/40 animate-pulse" />
+      )}
+    </section>
   );
 }
