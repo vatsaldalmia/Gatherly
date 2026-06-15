@@ -14,7 +14,10 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppVenuesRouteImport } from './routes/_app.venues'
+import { Route as AppSettingsRouteImport } from './routes/_app.settings'
+import { Route as AppProfileRouteImport } from './routes/_app.profile'
 import { Route as AppMeetupsRouteImport } from './routes/_app.meetups'
+import { Route as AppExploreRouteImport } from './routes/_app.explore'
 import { Route as AppDashboardRouteImport } from './routes/_app.dashboard'
 import { Route as AppMeetupsCreateRouteImport } from './routes/_app.meetups.create'
 import { Route as AppMeetupsIdRouteImport } from './routes/_app.meetups.$id'
@@ -43,9 +46,24 @@ const AppVenuesRoute = AppVenuesRouteImport.update({
   path: '/venues',
   getParentRoute: () => AppRoute,
 } as any)
+const AppSettingsRoute = AppSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppMeetupsRoute = AppMeetupsRouteImport.update({
   id: '/meetups',
   path: '/meetups',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppExploreRoute = AppExploreRouteImport.update({
+  id: '/explore',
+  path: '/explore',
   getParentRoute: () => AppRoute,
 } as any)
 const AppDashboardRoute = AppDashboardRouteImport.update({
@@ -69,7 +87,10 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/dashboard': typeof AppDashboardRoute
+  '/explore': typeof AppExploreRoute
   '/meetups': typeof AppMeetupsRouteWithChildren
+  '/profile': typeof AppProfileRoute
+  '/settings': typeof AppSettingsRoute
   '/venues': typeof AppVenuesRoute
   '/meetups/$id': typeof AppMeetupsIdRoute
   '/meetups/create': typeof AppMeetupsCreateRoute
@@ -79,7 +100,10 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/dashboard': typeof AppDashboardRoute
+  '/explore': typeof AppExploreRoute
   '/meetups': typeof AppMeetupsRouteWithChildren
+  '/profile': typeof AppProfileRoute
+  '/settings': typeof AppSettingsRoute
   '/venues': typeof AppVenuesRoute
   '/meetups/$id': typeof AppMeetupsIdRoute
   '/meetups/create': typeof AppMeetupsCreateRoute
@@ -91,7 +115,10 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
   '/_app/dashboard': typeof AppDashboardRoute
+  '/_app/explore': typeof AppExploreRoute
   '/_app/meetups': typeof AppMeetupsRouteWithChildren
+  '/_app/profile': typeof AppProfileRoute
+  '/_app/settings': typeof AppSettingsRoute
   '/_app/venues': typeof AppVenuesRoute
   '/_app/meetups/$id': typeof AppMeetupsIdRoute
   '/_app/meetups/create': typeof AppMeetupsCreateRoute
@@ -103,7 +130,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/dashboard'
+    | '/explore'
     | '/meetups'
+    | '/profile'
+    | '/settings'
     | '/venues'
     | '/meetups/$id'
     | '/meetups/create'
@@ -113,7 +143,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/dashboard'
+    | '/explore'
     | '/meetups'
+    | '/profile'
+    | '/settings'
     | '/venues'
     | '/meetups/$id'
     | '/meetups/create'
@@ -124,7 +157,10 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup'
     | '/_app/dashboard'
+    | '/_app/explore'
     | '/_app/meetups'
+    | '/_app/profile'
+    | '/_app/settings'
     | '/_app/venues'
     | '/_app/meetups/$id'
     | '/_app/meetups/create'
@@ -174,11 +210,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppVenuesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/settings': {
+      id: '/_app/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AppSettingsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/profile': {
+      id: '/_app/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/meetups': {
       id: '/_app/meetups'
       path: '/meetups'
       fullPath: '/meetups'
       preLoaderRoute: typeof AppMeetupsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/explore': {
+      id: '/_app/explore'
+      path: '/explore'
+      fullPath: '/explore'
+      preLoaderRoute: typeof AppExploreRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/dashboard': {
@@ -221,13 +278,19 @@ const AppMeetupsRouteWithChildren = AppMeetupsRoute._addFileChildren(
 
 interface AppRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
+  AppExploreRoute: typeof AppExploreRoute
   AppMeetupsRoute: typeof AppMeetupsRouteWithChildren
+  AppProfileRoute: typeof AppProfileRoute
+  AppSettingsRoute: typeof AppSettingsRoute
   AppVenuesRoute: typeof AppVenuesRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
+  AppExploreRoute: AppExploreRoute,
   AppMeetupsRoute: AppMeetupsRouteWithChildren,
+  AppProfileRoute: AppProfileRoute,
+  AppSettingsRoute: AppSettingsRoute,
   AppVenuesRoute: AppVenuesRoute,
 }
 
