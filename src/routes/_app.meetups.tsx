@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { meetups } from "@/lib/dummy-data";
+import { useMeetupsList } from "@/lib/meetup-store";
 import { CalendarRange, MapPin, Plus } from "lucide-react";
 
 export const Route = createFileRoute("/_app/meetups")({
@@ -19,6 +19,7 @@ function MeetupsLayout() {
 }
 
 function MeetupsList() {
+  const meetups = useMeetupsList();
   return (
     <>
       <AppTopbar title="Meetups" />
@@ -38,11 +39,12 @@ function MeetupsList() {
         <Tabs defaultValue="all">
           <TabsList>
             <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+            <TabsTrigger value="waiting">Waiting</TabsTrigger>
+            <TabsTrigger value="ready">Ready</TabsTrigger>
             <TabsTrigger value="voting">Voting</TabsTrigger>
-            <TabsTrigger value="past">Past</TabsTrigger>
+            <TabsTrigger value="finalized">Finalized</TabsTrigger>
           </TabsList>
-          {(["all", "upcoming", "voting", "past"] as const).map((tab) => (
+          {(["all", "waiting", "ready", "voting", "finalized"] as const).map((tab) => (
             <TabsContent key={tab} value={tab} className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {meetups
                 .filter((m) => tab === "all" || m.status === tab)
@@ -57,30 +59,39 @@ function MeetupsList() {
                       <Badge variant="secondary" className="rounded-full">{m.type}</Badge>
                       <Badge
                         variant="outline"
-                        className={m.status === "voting" ? "bg-mint text-mint-foreground border-0" : ""}
+                        className={
+                          m.status === "voting" || m.status === "finalized"
+                            ? "bg-mint text-mint-foreground border-0"
+                            : ""
+                        }
                       >
                         {m.status}
                       </Badge>
                     </div>
                     <h3 className="mt-4 font-semibold text-lg group-hover:text-primary transition-colors">{m.name}</h3>
-                    <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
-                      <CalendarRange className="h-3.5 w-3.5" /> {m.date} · {m.time}
-                    </p>
-                    {m.area && (
+                    {(m.date || m.time) && (
+                      <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
+                        <CalendarRange className="h-3.5 w-3.5" /> {m.date} {m.time && `· ${m.time}`}
+                      </p>
+                    )}
+                    {m.finalizedArea && (
                       <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-                        <MapPin className="h-3.5 w-3.5" /> {m.area}
+                        <MapPin className="h-3.5 w-3.5" /> {m.finalizedArea}
                       </p>
                     )}
                     <div className="mt-5 pt-4 border-t border-border flex items-center justify-between">
                       <div className="flex -space-x-2">
-                        {m.members.slice(0, 4).map((mm) => (
-                          <Avatar key={mm.name} className="h-7 w-7 border-2 border-card">
+                        {m.participants.slice(0, 4).map((mm) => (
+                          <Avatar key={mm.id} className="h-7 w-7 border-2 border-card">
                             <AvatarImage src={mm.avatar} />
                             <AvatarFallback>{mm.name[0]}</AvatarFallback>
                           </Avatar>
                         ))}
+                        {m.participants.length === 0 && (
+                          <span className="text-xs text-muted-foreground">No one yet</span>
+                        )}
                       </div>
-                      <span className="text-xs text-muted-foreground">{m.members.length} members</span>
+                      <span className="text-xs text-muted-foreground">{m.participants.length} joined</span>
                     </div>
                   </Link>
                 ))}
