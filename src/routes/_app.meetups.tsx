@@ -39,9 +39,10 @@ function MeetupsList() {
         <Tabs defaultValue="all">
           <TabsList>
             <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+            <TabsTrigger value="waiting">Waiting</TabsTrigger>
+            <TabsTrigger value="ready">Ready</TabsTrigger>
             <TabsTrigger value="voting">Voting</TabsTrigger>
-            <TabsTrigger value="past">Past</TabsTrigger>
+            <TabsTrigger value="finalized">Finalized</TabsTrigger>
           </TabsList>
           {(["all", "waiting", "ready", "voting", "finalized"] as const).map((tab) => (
             <TabsContent key={tab} value={tab} className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
