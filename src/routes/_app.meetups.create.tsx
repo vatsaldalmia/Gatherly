@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { createMeetup } from "@/lib/meetup-store";
 
 export const Route = createFileRoute("/_app/meetups/create")({
   head: () => ({ meta: [{ title: "Create meetup — Gatherly" }] }),
@@ -60,6 +61,10 @@ function CreateMeetup() {
   const [type, setType] = useState("friends");
   const [budget, setBudget] = useState([1500]);
   const [travelMode, setTravelMode] = useState<string[]>(["car", "metro"]);
+  const [name, setName] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [notes, setNotes] = useState("");
 
   const toggleTravel = (id: string) =>
     setTravelMode((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
@@ -79,14 +84,27 @@ function CreateMeetup() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              const finalName = name.trim() || "Untitled meetup";
+              const rec = createMeetup({
+                name: finalName,
+                type: types.find((t) => t.id === type)?.label ?? "Friends",
+                hostName: "You",
+                date: date || undefined,
+                time: time || undefined,
+                notes: notes || undefined,
+              });
               toast.success("Meetup created! Share the link with friends.");
-              navigate({ to: "/meetups/$id", params: { id: "m-102" } });
+              navigate({
+                to: "/meetups/$id",
+                params: { id: rec.id },
+                search: { created: 1 } as never,
+              });
             }}
             className="space-y-8 rounded-2xl border border-border bg-card shadow-card p-6 sm:p-8"
           >
             <div className="space-y-2">
               <Label htmlFor="name">Meetup name</Label>
-              <Input id="name" placeholder="Sunday brunch crew" required className="h-11" />
+              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Sunday brunch crew" required className="h-11" />
             </div>
 
             <div className="space-y-3">
@@ -125,11 +143,11 @@ function CreateMeetup() {
             <div className="grid sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="date">Preferred date</Label>
-                <Input id="date" type="date" className="h-11" />
+                <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="h-11" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="time">Preferred time</Label>
-                <Input id="time" type="time" className="h-11" />
+                <Input id="time" type="time" value={time} onChange={(e) => setTime(e.target.value)} className="h-11" />
               </div>
             </div>
 
@@ -158,7 +176,7 @@ function CreateMeetup() {
 
             <div className="space-y-2">
               <Label htmlFor="notes">Notes (optional)</Label>
-              <Textarea id="notes" placeholder="Any vibes, requests, or specific cuisines?" rows={3} />
+              <Textarea id="notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any vibes, requests, or specific cuisines?" rows={3} />
             </div>
 
             <div className="space-y-2">
