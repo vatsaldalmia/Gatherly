@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useSearch } from "@tanstack/react-router";
 import { useState } from "react";
 import { AppTopbar } from "@/components/app-topbar";
 import { Badge } from "@/components/ui/badge";
@@ -9,12 +9,16 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/venues")({
   head: () => ({ meta: [{ title: "Venues — Gatherly" }] }),
+  validateSearch: (s: Record<string, unknown>) => ({
+    area: typeof s.area === "string" ? s.area : undefined,
+  }),
   component: VenuesPage,
 });
 
 const cats = ["All", "Restaurants", "Cafes", "Parks", "Coworking", "Entertainment"];
 
 function VenuesPage() {
+  const { area } = useSearch({ from: "/_app/venues" });
   const [cat, setCat] = useState("All");
   const list = cat === "All" ? venues : venues.filter((v) => v.category === cat);
   return (
@@ -23,7 +27,10 @@ function VenuesPage() {
       <main className="flex-1 px-4 sm:px-8 py-8 space-y-6">
         <div>
           <h2 className="text-2xl sm:text-3xl font-bold tracking-tight">Discover venues</h2>
-          <p className="text-muted-foreground mt-1">Curated places your group will love.</p>
+          <p className="text-muted-foreground mt-1">
+            {area ? <>Showing picks for <span className="text-foreground font-medium">{area}</span> — curated for your group.</>
+              : "Curated places your group will love."}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {cats.map((c) => (
