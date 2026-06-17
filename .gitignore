@@ -35,3 +35,14 @@ dist-ssr
 .env
 .env.local
 .env.*.local
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Claude local config
+.claude/
+
+# Drizzle generated migrations
+drizzle/

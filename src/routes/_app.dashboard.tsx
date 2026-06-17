@@ -1,22 +1,26 @@
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import {
   ArrowUpRight,
   CalendarRange,
   Plus,
-  TrendingUp,
   Vote,
   Users,
   MapPin,
   Sparkles,
+  Clock,
+  Trophy,
+  Hourglass,
 } from "lucide-react";
 import { AppTopbar } from "@/components/app-topbar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FairnessScore } from "@/components/fairness-score";
-import { meetups, venues } from "@/lib/dummy-data";
+import { useMeetupsListQuery } from "@/lib/api/hooks";
+import { useSession } from "@/lib/auth/auth-client";
+import type { ParticipantPin } from "@/components/TestMap";
 
 const TestMap = lazy(() => import("@/components/TestMap"));
 
@@ -25,35 +29,64 @@ export const Route = createFileRoute("/_app/dashboard")({
   component: Dashboard,
 });
 
+function timeGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+const statusColor: Record<string, string> = {
+  waiting: "bg-muted text-foreground",
+  ready: "bg-primary/10 text-primary",
+  voting: "bg-mint/20 text-mint",
+  finalized: "bg-mint text-mint-foreground",
+};
+
 function Dashboard() {
-  const upcoming = meetups.filter((m) => m.status === "upcoming");
-  const voting = meetups.filter((m) => m.status === "voting");
-  const past = meetups.filter((m) => m.status === "past");
+  const { data: session } = useSession();
+  const { data: allMeetups = [], isLoading } = useMeetupsListQuery();
+  const firstName = session?.user?.name?.split(" ")[0] ?? "there";
+
+  const waiting = allMeetups.filter((m) => m.status === "waiting");
+  const voting = allMeetups.filter((m) => m.status === "voting");
+  const finalized = allMeetups.filter((m) => m.status === "finalized");
+  const active = allMeetups.filter((m) => m.status !== "finalized");
+
+  const totalParticipants = allMeetups.reduce((s, m) => s + m.participants.length, 0);
 
   const stats = [
-    { label: "Upcoming meetups", value: upcoming.length, icon: CalendarRange, accent: "text-primary" },
+    { label: "Active meetups", value: active.length, icon: CalendarRange, accent: "text-primary" },
     { label: "Pending votes", value: voting.length, icon: Vote, accent: "text-mint" },
-    { label: "Recent plans", value: past.length + voting.length, icon: TrendingUp, accent: "text-primary" },
-    { label: "Friends planning", value: 14, icon: Users, accent: "text-mint" },
+    { label: "Finalized", value: finalized.length, icon: Trophy, accent: "text-primary" },
+    { label: "Total participants", value: totalParticipants, icon: Users, accent: "text-mint" },
   ];
 
   return (
     <>
       <AppTopbar title="Dashboard" />
       <main className="flex-1 px-4 sm:px-8 py-8 space-y-8">
+        {/* Hero */}
         <div className="relative overflow-hidden rounded-3xl bg-gradient-hero text-primary-foreground p-6 sm:p-10 shadow-elegant">
           <div className="absolute inset-0 [background-image:radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.15)_1px,transparent_0)] [background-size:24px_24px]" />
+          <div className="absolute -top-10 -right-10 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
           <div className="relative grid sm:grid-cols-[1fr_auto] gap-6 items-center">
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur text-xs font-medium">
-                <Sparkles className="h-3.5 w-3.5" /> Good evening, Aarav
+                <Sparkles className="h-3.5 w-3.5" /> {timeGreeting()}, {firstName}
               </div>
-              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">Ready to gather?</h2>
-              <p className="mt-2 opacity-90 max-w-xl">
-                You've got 2 meetups pending votes and a brunch crew waiting on Sunday.
+              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">
+                {allMeetups.length === 0 ? "Ready to gather?" : `${allMeetups.length} meetup${allMeetups.length === 1 ? "" : "s"} planned`}
+              </h2>
+              <p className="mt-2 opacity-90 max-w-xl text-sm sm:text-base">
+                {voting.length > 0
+                  ? `${voting.length} meetup${voting.length === 1 ? " needs" : "s need"} your vote right now.`
+                  : waiting.length > 0
+                    ? `${waiting.length} meetup${waiting.length === 1 ? " is" : "s are"} waiting for participants.`
+                    : "Create a new meetup and share with your group."}
               </p>
             </div>
-            <Button asChild size="lg" variant="secondary" className="shadow-elegant">
+            <Button asChild size="lg" variant="secondary" className="shadow-elegant shrink-0">
               <Link to="/meetups/create">
                 <Plus className="h-4 w-4 mr-2" /> New meetup
               </Link>
@@ -61,6 +94,7 @@ function Dashboard() {
           </div>
         </div>
 
+        {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {stats.map((s, i) => (
             <motion.div
@@ -76,121 +110,146 @@ function Dashboard() {
                 </span>
                 <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
               </div>
-              <p className="mt-4 text-3xl font-bold tracking-tight">{s.value}</p>
+              <p className="mt-4 text-3xl font-bold tracking-tight">
+                {isLoading ? <span className="inline-block h-7 w-8 rounded bg-muted animate-pulse" /> : s.value}
+              </p>
               <p className="text-xs text-muted-foreground mt-1">{s.label}</p>
             </motion.div>
           ))}
         </div>
 
+        {/* Meetup list + Vote panel */}
         <div className="grid lg:grid-cols-[1.4fr_1fr] gap-6">
+          {/* All meetups */}
           <section className="rounded-2xl border border-border bg-card shadow-card">
             <div className="p-5 sm:p-6 border-b border-border flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-semibold">Upcoming meetups</h3>
-                <p className="text-sm text-muted-foreground">Plans your group has locked in.</p>
+                <h3 className="text-lg font-semibold">Your meetups</h3>
+                <p className="text-sm text-muted-foreground">All the plans you're organising.</p>
               </div>
               <Button variant="ghost" size="sm" asChild>
                 <Link to="/meetups">View all</Link>
               </Button>
             </div>
-            <div className="divide-y divide-border">
-              {upcoming.concat(voting).map((m) => (
-                <Link
-                  key={m.id}
-                  to="/meetups/$id"
-                  params={{ id: m.id }}
-                  className="block p-5 sm:p-6 hover:bg-muted/40 transition-colors"
-                >
-                  <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 items-center">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Badge variant="secondary" className="rounded-full">{m.type}</Badge>
-                        <Badge variant={m.status === "voting" ? "default" : "outline"} className={m.status === "voting" ? "bg-mint text-mint-foreground border-0" : ""}>
-                          {m.status === "voting" ? "Voting open" : "Confirmed"}
-                        </Badge>
-                      </div>
-                      <h4 className="mt-2 font-semibold truncate">{m.name}</h4>
-                      <p className="text-sm text-muted-foreground mt-0.5">
-                        {m.date} · {m.time}
-                        {m.area && (
-                          <>
-                            {" · "}
-                            <MapPin className="inline h-3 w-3 -mt-0.5 mr-0.5" />
-                            {m.area}
-                          </>
-                        )}
-                      </p>
+            {isLoading ? (
+              <div className="divide-y divide-border">
+                {[1, 2, 3].map((n) => (
+                  <div key={n} className="p-5 sm:p-6 flex items-center gap-4">
+                    <div className="flex-1 space-y-2">
+                      <div className="h-4 w-32 rounded bg-muted animate-pulse" />
+                      <div className="h-3 w-48 rounded bg-muted animate-pulse" />
                     </div>
-                    <div className="flex -space-x-2">
-                      {m.members.slice(0, 4).map((mm) => (
-                        <Avatar key={mm.name} className="h-8 w-8 border-2 border-card">
-                          <AvatarImage src={mm.avatar} />
-                          <AvatarFallback>{mm.name[0]}</AvatarFallback>
-                        </Avatar>
-                      ))}
-                      {m.members.length > 4 && (
-                        <div className="h-8 w-8 rounded-full border-2 border-card bg-muted grid place-items-center text-xs font-medium">
-                          +{m.members.length - 4}
-                        </div>
-                      )}
-                    </div>
+                    <div className="h-8 w-8 rounded-full bg-muted animate-pulse" />
                   </div>
-                </Link>
-              ))}
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-border bg-card shadow-card p-5 sm:p-6 space-y-5">
-            <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold">Pending your vote</h3>
-              <Badge className="bg-mint text-mint-foreground border-0">{voting.length}</Badge>
-            </div>
-            {voting.map((m) => (
-              <div key={m.id} className="rounded-xl border border-border p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0">
-                    <p className="font-semibold truncate">{m.name}</p>
-                    <p className="text-xs text-muted-foreground">{m.date} · {m.members.length} members</p>
-                  </div>
-                  <FairnessScore value={88 + (m.id.length % 6)} size="sm" />
+                ))}
+              </div>
+            ) : allMeetups.length === 0 ? (
+              <div className="p-10 text-center space-y-3">
+                <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 grid place-items-center">
+                  <CalendarRange className="h-5 w-5 text-primary" />
                 </div>
-                <Button size="sm" asChild className="w-full">
-                  <Link to="/meetups/$id" params={{ id: m.id }}>Vote now</Link>
+                <p className="text-sm font-medium">No meetups yet</p>
+                <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                  Create your first meetup and Gatherly will find the fairest spot for everyone.
+                </p>
+                <Button asChild size="sm" className="bg-gradient-primary shadow-elegant mt-2">
+                  <Link to="/meetups/create"><Plus className="h-3.5 w-3.5 mr-1.5" /> New meetup</Link>
                 </Button>
               </div>
-            ))}
+            ) : (
+              <div className="divide-y divide-border">
+                {allMeetups.slice(0, 5).map((m) => (
+                  <Link
+                    key={m.id}
+                    to="/meetups/$id"
+                    params={{ id: m.id }}
+                    search={{ created: undefined }}
+                    className="block p-5 sm:p-6 hover:bg-muted/40 transition-colors"
+                  >
+                    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 items-center">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="secondary" className="rounded-full capitalize">{m.type}</Badge>
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${statusColor[m.status] ?? "bg-muted text-foreground"}`}>
+                            {m.status === "waiting" && <Hourglass className="h-2.5 w-2.5" />}
+                            {m.status === "voting" && <Vote className="h-2.5 w-2.5" />}
+                            {m.status === "finalized" && <Trophy className="h-2.5 w-2.5" />}
+                            {m.status}
+                          </span>
+                        </div>
+                        <h4 className="mt-2 font-semibold truncate">{m.name}</h4>
+                        <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
+                          {m.date && <span className="flex items-center gap-1"><CalendarRange className="h-3 w-3" />{m.date}{m.time ? ` · ${m.time}` : ""}</span>}
+                          <span className="flex items-center gap-1"><Users className="h-3 w-3" />{m.participants.length} joined</span>
+                        </p>
+                      </div>
+                      <div className="flex -space-x-2 shrink-0">
+                        {m.participants.slice(0, 4).map((p) => (
+                          <Avatar key={p.id} className="h-8 w-8 border-2 border-card">
+                            <AvatarImage src={p.avatar ?? undefined} />
+                            <AvatarFallback className="text-xs">{p.name[0]}</AvatarFallback>
+                          </Avatar>
+                        ))}
+                        {m.participants.length > 4 && (
+                          <div className="h-8 w-8 rounded-full border-2 border-card bg-muted grid place-items-center text-xs font-medium">
+                            +{m.participants.length - 4}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Pending votes */}
+          <section className="rounded-2xl border border-border bg-card shadow-card p-5 sm:p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-semibold">Pending your vote</h3>
+              {voting.length > 0 && (
+                <Badge className="bg-mint text-mint-foreground border-0">{voting.length}</Badge>
+              )}
+            </div>
+            {voting.length === 0 ? (
+              <div className="py-8 text-center space-y-2">
+                <div className="mx-auto h-10 w-10 rounded-full bg-muted grid place-items-center">
+                  <Vote className="h-4.5 w-4.5 text-muted-foreground" />
+                </div>
+                <p className="text-sm text-muted-foreground">No active votes right now.</p>
+                <p className="text-xs text-muted-foreground/70">Once a host triggers the fairness engine, votes open here.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {voting.map((m) => {
+                  const topArea = m.areas?.slice().sort((a, b) => b.fairnessScore - a.fairnessScore)[0];
+                  return (
+                    <div key={m.id} className="rounded-xl border border-border p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold truncate">{m.name}</p>
+                          <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                            <Clock className="h-3 w-3" />
+                            {m.participants.length} participant{m.participants.length === 1 ? "" : "s"}
+                          </p>
+                        </div>
+                        {topArea && <FairnessScore value={topArea.fairnessScore} size="sm" />}
+                      </div>
+                      <Button size="sm" asChild className="w-full bg-gradient-primary shadow-elegant hover:opacity-90">
+                        <Link to="/meetups/$id" params={{ id: m.id }} search={{ created: undefined }}>
+                          Vote now
+                        </Link>
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </section>
         </div>
 
+        {/* Map */}
         <DashboardMap />
-
-        <section className="rounded-2xl border border-border bg-card shadow-card">
-          <div className="p-5 sm:p-6 border-b border-border flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold">Popular places nearby</h3>
-              <p className="text-sm text-muted-foreground">Spots your group is loving this week.</p>
-            </div>
-            <Button variant="ghost" size="sm" asChild>
-              <Link to="/explore">Explore</Link>
-            </Button>
-          </div>
-          <div className="p-5 sm:p-6 grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {venues.slice(0, 4).map((v) => (
-              <div key={v.id} className="group rounded-xl overflow-hidden border border-border bg-background hover:shadow-elegant transition-all">
-                <div className="aspect-[4/3] overflow-hidden">
-                  <img src={v.image} alt={v.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
-                </div>
-                <div className="p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="font-medium text-sm truncate">{v.name}</p>
-                    <span className="text-xs">★ {v.rating}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground truncate">{v.address}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
       </main>
     </>
   );
@@ -198,6 +257,19 @@ function Dashboard() {
 
 function DashboardMap() {
   const [mounted, setMounted] = useState(false);
+  const { data: liveMeetups = [] } = useMeetupsListQuery();
+
+  const participants = useMemo<ParticipantPin[]>(() => {
+    const pins: ParticipantPin[] = [];
+    for (const m of liveMeetups) {
+      for (const p of m.participants) {
+        if (p.lat != null && p.lng != null) {
+          pins.push({ id: p.id, name: p.name, lat: p.lat, lng: p.lng, meetupName: m.name });
+        }
+      }
+    }
+    return pins;
+  }, [liveMeetups]);
 
   useEffect(() => {
     setMounted(true);
@@ -205,22 +277,33 @@ function DashboardMap() {
 
   return (
     <section className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
-      <div className="p-5 sm:p-6 border-b border-border">
-        <h3 className="text-lg font-semibold">Meetup map</h3>
-        <p className="text-sm text-muted-foreground">See where your group is gathering.</p>
+      <div className="p-5 sm:p-6 border-b border-border flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-semibold">Meetup map</h3>
+          <p className="text-sm text-muted-foreground">
+            {participants.length > 0
+              ? `${participants.length} participant${participants.length === 1 ? "" : "s"} across your meetups`
+              : "See where your group is gathering."}
+          </p>
+        </div>
+        {participants.length > 0 && (
+          <span className="text-xs text-muted-foreground flex items-center gap-1">
+            <MapPin className="h-3 w-3" /> {liveMeetups.length} meetup{liveMeetups.length === 1 ? "" : "s"}
+          </span>
+        )}
       </div>
       {mounted ? (
         <Suspense
           fallback={
-            <div className="h-[600px] grid place-items-center text-sm text-muted-foreground">
+            <div className="h-[500px] grid place-items-center text-sm text-muted-foreground">
               Loading map…
             </div>
           }
         >
-          <TestMap />
+          <TestMap participants={participants} />
         </Suspense>
       ) : (
-        <div className="h-[600px] bg-muted/40 animate-pulse" />
+        <div className="h-[500px] bg-muted/40 animate-pulse" />
       )}
     </section>
   );
