@@ -1,40 +1,55 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   CalendarRange,
-  Compass,
+  MapPin,
   User,
-  Settings,
   Plus,
+  LogOut,
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import { useSession, signOut } from "@/lib/auth/auth-client";
 
 const items = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Meetups", url: "/meetups", icon: CalendarRange },
-  { title: "Explore", url: "/explore", icon: Compass },
+  { title: "Venues", url: "/venues", icon: MapPin },
   { title: "Profile", url: "/profile", icon: User },
-  { title: "Settings", url: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { data: session } = useSession();
+  const navigate = useNavigate();
+  const user = session?.user;
+  const initials = user?.name
+    ? user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
+    : "ME";
 
   return (
-    <aside className="hidden md:flex w-64 shrink-0 flex-col border-r border-border bg-sidebar text-sidebar-foreground">
+    <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+      {/* Logo */}
       <div className="h-16 px-5 flex items-center border-b border-sidebar-border">
         <Logo to="/dashboard" />
       </div>
-      <div className="px-3 py-4">
-        <Button asChild className="w-full bg-gradient-primary shadow-elegant hover:opacity-90">
+
+      {/* New meetup CTA */}
+      <div className="px-3 pt-4 pb-2">
+        <Button
+          asChild
+          className="w-full bg-gradient-primary shadow-elegant hover:opacity-90 h-10 rounded-xl font-semibold"
+        >
           <Link to="/meetups/create">
             <Plus className="h-4 w-4 mr-2" /> New meetup
           </Link>
         </Button>
       </div>
-      <nav className="flex-1 px-3 space-y-1">
+
+      {/* Nav */}
+      <nav className="flex-1 px-3 py-2 space-y-0.5">
         {items.map((item) => {
           const active =
             item.url === "/dashboard"
@@ -45,24 +60,53 @@ export function AppSidebar() {
               key={item.url}
               to={item.url}
               className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                "flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
                 active
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/60",
+                  ? "bg-primary/10 text-primary"
+                  : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/70",
               )}
             >
-              <item.icon className="h-4 w-4" />
+              <item.icon
+                className={cn(
+                  "h-4 w-4 shrink-0 transition-colors",
+                  active ? "text-primary" : "text-sidebar-foreground/40",
+                )}
+              />
               {item.title}
+              {active && (
+                <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
+              )}
             </Link>
           );
         })}
       </nav>
-      <div className="p-4 m-3 rounded-2xl bg-gradient-primary text-primary-foreground shadow-elegant">
-        <p className="text-sm font-semibold">Upgrade to Pro</p>
-        <p className="text-xs opacity-90 mt-1">Unlimited meetups & advanced fairness.</p>
-        <Button size="sm" variant="secondary" className="mt-3 w-full">
-          See plans
-        </Button>
+
+      {/* User footer */}
+      <div className="p-3 border-t border-sidebar-border">
+        <div className="group flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-sidebar-accent/60 transition-colors cursor-default">
+          <Avatar className="h-8 w-8 shrink-0 ring-2 ring-sidebar-border">
+            <AvatarImage src={user?.image ?? undefined} />
+            <AvatarFallback className="text-xs font-bold bg-gradient-primary text-primary-foreground">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold truncate leading-none">{user?.name ?? "You"}</p>
+            <p className="text-[11px] text-sidebar-foreground/50 truncate mt-0.5">{user?.email ?? ""}</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 opacity-0 group-hover:opacity-100 text-sidebar-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-all"
+            aria-label="Sign out"
+            onClick={async () => {
+              await signOut();
+              navigate({ to: "/login" });
+            }}
+          >
+            <LogOut className="h-3.5 w-3.5" />
+          </Button>
+        </div>
       </div>
     </aside>
   );

@@ -1,15 +1,15 @@
-import { createFileRoute, Link, useParams, useSearch } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { createFileRoute, Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { AppTopbar } from "@/components/app-topbar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { FairnessScore } from "@/components/fairness-score";
-import { areas } from "@/lib/dummy-data";
 import {
   ArrowLeft,
   Clock,
+  Loader2,
   MapPin,
   Route as RouteIcon,
   Share2,
@@ -21,18 +21,26 @@ import {
   Users,
   Copy,
   MessageCircle,
+  Trash2,
+  Pencil,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import {
-  castVote,
-  finalizeMeetup,
-  getMyParticipantId,
-  updateMeetup,
-  useMeetup,
-  type MeetupStatus,
-} from "@/lib/meetup-store";
+import { getMyParticipantId, type MeetupStatus } from "@/lib/meetup-store";
+import { useMeetupQuery, useCastVote, useRemoveVote, useCalculateAreas, useFinalizeMeetup, useDeleteMeetup, useMeetupsListQuery, useUpdateParticipant } from "@/lib/api/hooks";
+import { useSession } from "@/lib/auth/auth-client";
 import { ShareMeetupDialog } from "@/components/share-meetup-dialog";
+import { VenueSheet } from "@/components/VenueSheet";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
+import type { MeetupParticipant, BestArea } from "@/components/MeetupMap";
+
+const MeetupMap = lazy(() => import("@/components/MeetupMap").then((m) => ({ default: m.MeetupMap })));
+
+function shortAddr(addr: string) {
+  const first = addr.split(",")[0].trim();
+  return first.length > 22 ? first.slice(0, 20) + "…" : first;
+}
 
 export const Route = createFileRoute("/_app/meetups/$id")({
   head: () => ({ meta: [{ title: "Meetup — Gatherly" }] }),
@@ -52,9 +60,24 @@ const statusMeta: Record<MeetupStatus, { label: string; icon: typeof Hourglass; 
 function MeetupResults() {
   const { id } = useParams({ from: "/_app/meetups/$id" });
   const search = useSearch({ from: "/_app/meetups/$id" });
-  const meetup = useMeetup(id);
+  const navigate = useNavigate();
+  const { data: meetup, isLoading } = useMeetupQuery(id);
+  const { data: session } = useSession();
+  const { data: myMeetups = [] } = useMeetupsListQuery();
+  const castVoteMutation = useCastVote();
+  const removeVoteMutation = useRemoveVote();
+  const calculateAreasMutation = useCalculateAreas();
+  const finalizeMutation = useFinalizeMeetup();
+  const deleteMutation = useDeleteMeetup();
+  const updateParticipantMutation = useUpdateParticipant();
+
   const [shareOpen, setShareOpen] = useState(false);
   const [showRecs, setShowRecs] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [venueSheet, setVenueSheet] = useState<{ areaName: string; lat: number; lng: number } | null>(null);
+  const [editingAddress, setEditingAddress] = useState(false);
+  const [editAddr, setEditAddr] = useState("");
+  const [editTransport, setEditTransport] = useState("");
 
   useEffect(() => {
     if (search.created) setShareOpen(true);
@@ -65,25 +88,53 @@ function MeetupResults() {
   }, [meetup?.status]);
 
   const myId = id ? getMyParticipantId(id) : null;
+  // isHost: reliable check — listMeetups is auth-gated and only returns the user's own meetups
+  const isHost = myMeetups.some((m) => m.id === id) || (!!session?.user && meetup?.hostUserId === session.user.id);
 
-  const ranked = useMemo(() => {
-    if (!meetup) return [] as typeof areas;
-    return [...areas].sort((a, b) => b.fairness - a.fairness);
-  }, [meetup]);
-
-  const totalVotes = useMemo(() => {
-    if (!meetup) return 0;
-    return Object.values(meetup.votes ?? {}).reduce((s, arr) => s + arr.length, 0);
-  }, [meetup]);
-
-  const winner = useMemo(() => {
-    if (!meetup) return null;
-    let best: { name: string; count: number } | null = null;
-    for (const [name, voters] of Object.entries(meetup.votes ?? {})) {
-      if (!best || voters.length > best.count) best = { name, count: voters.length };
+  const handleDelete = async () => {
+    try {
+      await deleteMutation.mutateAsync(id);
+      navigate({ to: "/meetups" });
+      toast.success("Meetup deleted.");
+    } catch {
+      toast.error("Failed to delete meetup.");
     }
-    return best;
+  };
+
+  // Areas sorted by fairness score (from DB, not dummy data)
+  const ranked = useMemo(() => {
+    if (!meetup?.areas) return [];
+    return [...meetup.areas].sort((a, b) => b.fairnessScore - a.fairnessScore);
+  }, [meetup?.areas]);
+
+  // Total vote count
+  const totalVotes = meetup?.votes?.length ?? 0;
+
+  // Winner: area with the most votes
+  const winner = useMemo(() => {
+    if (!meetup || !meetup.votes?.length) return null;
+    const countByArea = new Map<string, number>();
+    for (const v of meetup.votes) {
+      countByArea.set(v.areaId, (countByArea.get(v.areaId) ?? 0) + 1);
+    }
+    let bestId = "";
+    let bestCount = 0;
+    for (const [areaId, count] of countByArea) {
+      if (count > bestCount) { bestId = areaId; bestCount = count; }
+    }
+    return meetup.areas?.find((a) => a.id === bestId) ?? null;
   }, [meetup]);
+
+  if (isLoading) {
+    return (
+      <>
+        <AppTopbar title="Meetup" />
+        <main className="flex-1 grid place-items-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </main>
+      </>
+    );
+  }
 
   if (!meetup) {
     return (
@@ -92,7 +143,7 @@ function MeetupResults() {
         <main className="flex-1 grid place-items-center px-4 py-20">
           <div className="text-center max-w-sm">
             <h2 className="text-xl font-semibold">Meetup not found</h2>
-            <p className="text-muted-foreground mt-2">It may have been deleted or never existed on this device.</p>
+            <p className="text-muted-foreground mt-2">It may have been deleted or never existed.</p>
             <Button asChild className="mt-6"><Link to="/meetups">Back to meetups</Link></Button>
           </div>
         </main>
@@ -100,7 +151,7 @@ function MeetupResults() {
     );
   }
 
-  const statusInfo = statusMeta[meetup.status];
+  const statusInfo = statusMeta[meetup.status as MeetupStatus];
   const StatusIcon = statusInfo.icon;
   const canCalc = meetup.participants.length >= 2;
   const shareUrl =
@@ -115,27 +166,52 @@ function MeetupResults() {
     }
   };
 
-  const findBestArea = () => {
+  const findBestArea = async () => {
     if (!canCalc) return;
-    setShowRecs(true);
-    updateMeetup(meetup.id, { status: "voting" });
-    toast.success("Recommendations ready — share so the group can vote!");
+    try {
+      await calculateAreasMutation.mutateAsync(meetup.id);
+      setShowRecs(true);
+      toast.success("Recommendations ready — share so the group can vote!");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : null;
+      toast.error(msg ?? "Failed to calculate areas. Check that all participants have valid addresses.");
+    }
   };
 
-  const vote = (areaName: string) => {
-    const voterId = myId ?? "host-self";
-    castVote(meetup.id, areaName, voterId);
-    toast.success(`Voted for ${areaName}`);
+  const vote = async (areaId: string, areaName: string, alreadyVoted: boolean) => {
+    if (!myId) {
+      toast.error("Join the meetup first to cast a vote.");
+      return;
+    }
+    try {
+      if (alreadyVoted) {
+        await removeVoteMutation.mutateAsync({ meetupId: meetup.id, participantId: myId });
+        toast.success("Vote removed.");
+      } else {
+        await castVoteMutation.mutateAsync({ meetupId: meetup.id, areaId, participantId: myId });
+        toast.success(`Voted for ${areaName}`);
+      }
+    } catch {
+      toast.error(alreadyVoted ? "Failed to remove vote" : "Failed to cast vote");
+    }
   };
 
-  const finalize = () => {
+  const finalize = async () => {
     if (!winner) {
       toast.error("No votes yet");
       return;
     }
-    finalizeMeetup(meetup.id, winner.name);
-    toast.success(`Finalized: ${winner.name}`);
+    try {
+      await finalizeMutation.mutateAsync({ meetupId: meetup.id, areaId: winner.id });
+      toast.success(`Finalized: ${winner.name}`);
+    } catch {
+      toast.error("Failed to finalize");
+    }
   };
+
+  const finalizedAreaName = meetup.finalizedAreaId
+    ? meetup.areas?.find((a) => a.id === meetup.finalizedAreaId)?.name
+    : null;
 
   return (
     <>
@@ -145,8 +221,36 @@ function MeetupResults() {
           <Button variant="ghost" size="sm" asChild>
             <Link to="/meetups"><ArrowLeft className="h-4 w-4 mr-1.5" /> All meetups</Link>
           </Button>
-          <div className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium", statusInfo.cls)}>
-            <StatusIcon className="h-3.5 w-3.5" /> {statusInfo.label}
+          <div className="flex items-center gap-2">
+            <div className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium", statusInfo.cls)}>
+              <StatusIcon className="h-3.5 w-3.5" /> {statusInfo.label}
+            </div>
+            {isHost && !confirmDelete && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                onClick={() => setConfirmDelete(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Delete
+              </Button>
+            )}
+            {isHost && confirmDelete && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Are you sure?</span>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={deleteMutation.isPending}
+                  onClick={handleDelete}
+                >
+                  {deleteMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Yes, delete"}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>
+                  Cancel
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -179,54 +283,30 @@ function MeetupResults() {
             </section>
 
             <section className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
-              <div className="relative h-64 sm:h-80 bg-gradient-hero">
-                <div className="absolute inset-0 [background-image:radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.15)_1px,transparent_0)] [background-size:24px_24px]" />
-                <svg className="absolute inset-0 w-full h-full opacity-60" viewBox="0 0 600 320">
-                  <defs>
-                    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="white" strokeOpacity="0.15" strokeWidth="0.5" />
-                    </pattern>
-                  </defs>
-                  <rect width="600" height="320" fill="url(#grid)" />
-                  <path d="M0 200 Q150 120 300 180 T600 140" stroke="white" strokeOpacity="0.4" strokeWidth="2" fill="none" strokeDasharray="6 4" />
-                  <path d="M80 50 Q200 220 380 90 T580 260" stroke="white" strokeOpacity="0.3" strokeWidth="2" fill="none" strokeDasharray="6 4" />
-                </svg>
-                {meetup.participants.slice(0, 6).map((m, i) => (
-                  <div
-                    key={m.id}
-                    className="absolute"
-                    style={{
-                      left: `${12 + i * 14}%`,
-                      top: `${25 + (i % 3) * 20}%`,
-                    }}
-                  >
-                    <div className="relative">
-                      <Avatar className="h-10 w-10 ring-4 ring-white/30 shadow-elegant">
-                        <AvatarImage src={m.avatar} />
-                        <AvatarFallback>{m.name[0]}</AvatarFallback>
-                      </Avatar>
-                      <span className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-card text-[10px] font-medium border border-border">
-                        {m.address.slice(0, 12)}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                  <div className="h-14 w-14 rounded-full bg-mint grid place-items-center shadow-elegant ring-4 ring-white/50">
-                    <MapPin className="h-6 w-6 text-mint-foreground" />
-                  </div>
-                  <p className="mt-2 text-xs text-white font-semibold text-center bg-black/40 backdrop-blur px-2 py-0.5 rounded-full">
-                    {meetup.finalizedArea ?? (winner?.name ?? "Best area")}
-                  </p>
-                </div>
-              </div>
+              {/* Real map */}
+              {(() => {
+                const mapParticipants: MeetupParticipant[] = meetup.participants
+                  .filter((p) => p.lat != null && p.lng != null)
+                  .map((p) => ({ id: p.id, name: p.name, lat: p.lat!, lng: p.lng!, address: p.address }));
+
+                const topArea = ranked[0];
+                const bestArea: BestArea | undefined = topArea
+                  ? { lat: topArea.lat, lng: topArea.lng, name: topArea.name }
+                  : undefined;
+
+                return (
+                  <Suspense fallback={<div className="h-72 sm:h-80 bg-muted/40 animate-pulse" />}>
+                    <MeetupMap participants={mapParticipants} bestArea={bestArea} height="h-72 sm:h-80" />
+                  </Suspense>
+                );
+              })()}
               <div className="p-5 sm:p-6 flex flex-wrap gap-4 items-center justify-between">
                 <div>
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">Top pick</p>
                   <h3 className="text-xl font-semibold mt-1">{ranked[0]?.name ?? "—"}</h3>
-                  <p className="text-sm text-muted-foreground">Highest fairness score · 4 venues recommended</p>
+                  <p className="text-sm text-muted-foreground">Highest fairness score · {ranked.length} areas found</p>
                 </div>
-                <FairnessScore value={ranked[0]?.fairness ?? 0} size="lg" />
+                <FairnessScore value={ranked[0]?.fairnessScore ?? 0} size="lg" />
               </div>
             </section>
 
@@ -239,16 +319,20 @@ function MeetupResults() {
                   <h3 className="font-semibold">Find the fairest area</h3>
                   <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
                     {canCalc
-                      ? "Everyone's in — let's calculate the best meetup spots and open it up to votes."
+                      ? "Everyone's in — let's calculate the best meetup spots using real travel times."
                       : `Need ${2 - meetup.participants.length} more participant${2 - meetup.participants.length === 1 ? "" : "s"} before we can calculate.`}
                   </p>
                 </div>
                 <Button
-                  disabled={!canCalc}
+                  disabled={!canCalc || calculateAreasMutation.isPending}
                   onClick={findBestArea}
                   className="bg-gradient-primary shadow-elegant hover:opacity-90"
                 >
-                  <Sparkles className="h-4 w-4 mr-2" /> Find best area
+                  {calculateAreasMutation.isPending ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Calculating…</>
+                  ) : (
+                    <><Sparkles className="h-4 w-4 mr-2" /> Find best area</>
+                  )}
                 </Button>
               </section>
             ) : (
@@ -256,56 +340,69 @@ function MeetupResults() {
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold">Recommended areas</h3>
                   {meetup.status === "voting" && winner && (
-                    <Button size="sm" variant="outline" onClick={finalize}>
+                    <Button size="sm" variant="outline" onClick={finalize} disabled={finalizeMutation.isPending}>
                       <Trophy className="h-3.5 w-3.5 mr-1.5" /> Finalize {winner.name}
                     </Button>
                   )}
                 </div>
                 <div className="space-y-3">
                   {ranked.map((a) => {
-                    const voters = meetup.votes?.[a.name] ?? [];
-                    const myVote = myId ? voters.includes(myId) : voters.includes("host-self");
-                    const isFinal = meetup.finalizedArea === a.name;
+                    const voterIds = meetup.votes?.filter((v) => v.areaId === a.id).map((v) => v.participantId) ?? [];
+                    const myVote = myId ? voterIds.includes(myId) : false;
+                    const isFinal = meetup.finalizedAreaId === a.id;
                     return (
                       <div
-                        key={a.name}
+                        key={a.id}
                         className={cn(
                           "p-5 rounded-2xl border bg-card shadow-card grid grid-cols-[auto_minmax(0,1fr)_auto] gap-4 items-center",
                           isFinal ? "border-mint" : "border-border",
                         )}
                       >
-                        <FairnessScore value={a.fairness} />
+                        <FairnessScore value={a.fairnessScore} />
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <h4 className="font-semibold truncate">{a.name}</h4>
                             {isFinal && <Badge className="bg-mint text-mint-foreground border-0">Finalized</Badge>}
-                            {!isFinal && a.fairness >= 90 && (
+                            {!isFinal && a.fairnessScore >= 90 && (
                               <Badge className="bg-primary/10 text-primary border-0">Top pick</Badge>
                             )}
-                            {voters.length > 0 && (
+                            {voterIds.length > 0 && (
                               <Badge variant="outline" className="text-xs">
-                                {voters.length} vote{voters.length === 1 ? "" : "s"}
+                                {voterIds.length} vote{voterIds.length === 1 ? "" : "s"}
                               </Badge>
                             )}
                           </div>
-                          <p className="text-sm text-muted-foreground mt-1 truncate">{a.description}</p>
+                          {a.description && (
+                            <p className="text-sm text-muted-foreground mt-1 truncate">{a.description}</p>
+                          )}
                           <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {a.travelTime} min avg</span>
-                            <span className="flex items-center gap-1"><RouteIcon className="h-3 w-3" /> {a.distance} km avg</span>
+                            <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {a.avgTravelTimeMin} min avg</span>
+                            <span className="flex items-center gap-1"><RouteIcon className="h-3 w-3" /> {a.avgDistanceKm} km avg</span>
                           </div>
                         </div>
                         <div className="flex flex-col gap-2">
-                          <Button size="sm" variant="outline" asChild>
-                            <Link to="/venues" search={{ area: a.name } as never}>View venues</Link>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setVenueSheet({ areaName: a.name, lat: a.lat, lng: a.lng })}
+                          >
+                            View venues
                           </Button>
                           <Button
                             size="sm"
-                            disabled={meetup.status === "finalized"}
-                            onClick={() => vote(a.name)}
-                            className={cn(myVote && "bg-mint text-mint-foreground hover:bg-mint/90")}
+                            disabled={meetup.status === "finalized" || castVoteMutation.isPending || removeVoteMutation.isPending}
+                            onClick={() => vote(a.id, a.name, myVote)}
+                            className={cn(
+                              myVote
+                                ? "bg-destructive/10 text-destructive border border-destructive/30 hover:bg-destructive/20"
+                                : "bg-gradient-primary text-primary-foreground shadow-elegant hover:opacity-90",
+                            )}
                           >
-                            <Vote className="h-3.5 w-3.5 mr-1.5" />
-                            {myVote ? "Voted" : "Vote"}
+                            {myVote ? (
+                              <><Vote className="h-3.5 w-3.5 mr-1.5" /> Remove vote</>
+                            ) : (
+                              <><Vote className="h-3.5 w-3.5 mr-1.5" /> Vote</>
+                            )}
                           </Button>
                         </div>
                       </div>
@@ -344,23 +441,102 @@ function MeetupResults() {
                     </Button>
                   </div>
                 )}
-                {meetup.participants.map((m) => (
-                  <div key={m.id} className="flex items-center gap-3">
-                    <Avatar className="h-9 w-9">
-                      <AvatarImage src={m.avatar} />
-                      <AvatarFallback>{m.name[0]}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{m.name}</p>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
-                        <MapPin className="h-3 w-3" /> {m.address}
-                      </p>
+                {meetup.participants.map((m) => {
+                  const isMe = m.id === myId;
+                  if (isMe && editingAddress) {
+                    return (
+                      <div key={m.id} className="rounded-xl border border-primary/30 bg-primary/5 p-3 space-y-2">
+                        <p className="text-xs font-medium text-primary">Update your info</p>
+                        <AddressAutocomplete
+                          value={editAddr}
+                          onChange={setEditAddr}
+                          onSelect={(desc) => setEditAddr(desc)}
+                          placeholder="Your address"
+                          className="h-9 text-sm"
+                        />
+                        <select
+                          value={editTransport}
+                          onChange={(e) => setEditTransport(e.target.value)}
+                          className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                          {["car", "metro", "bus", "train", "taxi", "bike", "walking"].map((t) => (
+                            <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+                          ))}
+                        </select>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            className="flex-1 h-8 bg-gradient-primary text-primary-foreground hover:opacity-90"
+                            disabled={updateParticipantMutation.isPending || !editAddr.trim()}
+                            onClick={async () => {
+                              try {
+                                await updateParticipantMutation.mutateAsync({
+                                  participantId: m.id,
+                                  meetupId: meetup.id,
+                                  address: editAddr,
+                                  transport: editTransport as never,
+                                });
+                                setEditingAddress(false);
+                                // Re-run area calculation if areas were already computed
+                                if (ranked.length > 0) {
+                                  toast.promise(
+                                    calculateAreasMutation.mutateAsync(meetup.id).then(() => setShowRecs(true)),
+                                    {
+                                      loading: "Address updated — recalculating areas…",
+                                      success: "Areas updated with your new address!",
+                                      error: "Address saved. Ask the host to recalculate areas.",
+                                    },
+                                  );
+                                } else {
+                                  toast.success("Address updated!");
+                                }
+                              } catch {
+                                toast.error("Failed to update address.");
+                              }
+                            }}
+                          >
+                            {updateParticipantMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-8" onClick={() => setEditingAddress(false)}>
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={m.id} className="flex items-center gap-3">
+                      <Avatar className="h-9 w-9">
+                        <AvatarImage src={m.avatar ?? undefined} />
+                        <AvatarFallback>{m.name[0]}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{m.name}{isMe && <span className="ml-1 text-xs text-muted-foreground">(you)</span>}</p>
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
+                          <MapPin className="h-3 w-3 shrink-0" /> {shortAddr(m.address)}
+                        </p>
+                      </div>
+                      {isMe ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
+                          onClick={() => {
+                            setEditAddr(m.address);
+                            setEditTransport(m.transport);
+                            setEditingAddress(true);
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      ) : (
+                        <Badge variant="outline" className="text-xs gap-1">
+                          <CheckCircle2 className="h-3 w-3 text-mint" /> Joined
+                        </Badge>
+                      )}
                     </div>
-                    <Badge variant="outline" className="text-xs gap-1">
-                      <CheckCircle2 className="h-3 w-3 text-mint" /> Joined
-                    </Badge>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
 
@@ -371,35 +547,35 @@ function MeetupResults() {
                   No votes yet. {showRecs ? "Cast the first one!" : "Calculate areas to start voting."}
                 </p>
               ) : (
-              <div className="mt-4 space-y-4">
+                <div className="mt-4 space-y-4">
                   {ranked.map((a) => {
-                    const count = meetup.votes?.[a.name]?.length ?? 0;
+                    const count = meetup.votes?.filter((v) => v.areaId === a.id).length ?? 0;
                     if (count === 0) return null;
                     const pct = Math.round((count / totalVotes) * 100);
-                  return (
-                    <div key={a.name}>
-                      <div className="flex justify-between text-sm">
+                    return (
+                      <div key={a.id}>
+                        <div className="flex justify-between text-sm">
                           <span className="font-medium flex items-center gap-1.5">
-                            {winner?.name === a.name && <Trophy className="h-3.5 w-3.5 text-mint" />}
+                            {winner?.id === a.id && <Trophy className="h-3.5 w-3.5 text-mint" />}
                             {a.name}
                           </span>
                           <span className="text-muted-foreground">{count} · {pct}%</span>
+                        </div>
+                        <Progress value={pct} className="mt-1.5 h-2" />
                       </div>
-                      <Progress value={pct} className="mt-1.5 h-2" />
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
               )}
-              {meetup.status === "finalized" && meetup.finalizedArea && (
+              {meetup.status === "finalized" && finalizedAreaName && (
                 <p className="text-xs text-mint mt-4 flex items-center gap-1">
-                  <Trophy className="h-3 w-3" /> Finalized: {meetup.finalizedArea}
+                  <Trophy className="h-3 w-3" /> Finalized: {finalizedAreaName}
                 </p>
               )}
             </section>
 
             <Button size="lg" className="w-full bg-gradient-primary shadow-elegant hover:opacity-90" asChild>
-              <Link to="/venues"><MapPin className="h-4 w-4 mr-2" /> Browse venues</Link>
+              <Link to="/venues" search={{ area: undefined }}><MapPin className="h-4 w-4 mr-2" /> Browse venues</Link>
             </Button>
           </aside>
         </div>
@@ -409,6 +585,14 @@ function MeetupResults() {
           onOpenChange={setShareOpen}
           meetupId={meetup.id}
           meetupName={meetup.name}
+        />
+
+        <VenueSheet
+          open={!!venueSheet}
+          onOpenChange={(v) => { if (!v) setVenueSheet(null); }}
+          areaName={venueSheet?.areaName ?? ""}
+          lat={venueSheet?.lat ?? 0}
+          lng={venueSheet?.lng ?? 0}
         />
       </main>
     </>
