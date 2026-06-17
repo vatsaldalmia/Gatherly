@@ -27,10 +27,15 @@ import {
   TrainFront,
   Train,
   Footprints,
+  Bus,
+  CarTaxiFront,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { createMeetup } from "@/lib/meetup-store";
+import { useCreateMeetup, useAddParticipant } from "@/lib/api/hooks";
+import { AddressAutocomplete } from "@/components/address-autocomplete";
+import { useSession } from "@/lib/auth/auth-client";
+import { setMyParticipantId, type TransportMode } from "@/lib/meetup-store";
 
 export const Route = createFileRoute("/_app/meetups/create")({
   head: () => ({ meta: [{ title: "Create meetup — Gatherly" }] }),
@@ -48,26 +53,32 @@ const types = [
   { id: "custom", label: "Custom", icon: Sparkles },
 ];
 
-const travel = [
+const transportOptions: { id: TransportMode; label: string; icon: typeof Car }[] = [
   { id: "car", label: "Car", icon: Car },
   { id: "bike", label: "Bike", icon: Bike },
   { id: "metro", label: "Metro", icon: TrainFront },
   { id: "train", label: "Train", icon: Train },
-  { id: "walking", label: "Walking", icon: Footprints },
+  { id: "bus", label: "Bus", icon: Bus },
+  { id: "taxi", label: "Taxi", icon: CarTaxiFront },
+  { id: "walking", label: "Walk", icon: Footprints },
 ];
 
 function CreateMeetup() {
   const navigate = useNavigate();
+  const createMeetupMutation = useCreateMeetup();
+  const addParticipantMutation = useAddParticipant();
+  const { data: session } = useSession();
+
   const [type, setType] = useState("friends");
   const [budget, setBudget] = useState([1500]);
-  const [travelMode, setTravelMode] = useState<string[]>(["car", "metro"]);
   const [name, setName] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [notes, setNotes] = useState("");
+  const [myAddress, setMyAddress] = useState("");
+  const [myTransport, setMyTransport] = useState<TransportMode>("car");
 
-  const toggleTravel = (id: string) =>
-    setTravelMode((prev) => (prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]));
+  const displayName = session?.user?.name ?? "You";
 
   return (
     <>
@@ -82,23 +93,40 @@ function CreateMeetup() {
           </div>
 
           <form
-            onSubmit={(e) => {
+            onSubmit={async (e) => {
               e.preventDefault();
+              if (!myAddress.trim()) {
+                toast.error("Add your starting location so we can calculate fair spots.");
+                return;
+              }
               const finalName = name.trim() || "Untitled meetup";
-              const rec = createMeetup({
-                name: finalName,
-                type: types.find((t) => t.id === type)?.label ?? "Friends",
-                hostName: "You",
-                date: date || undefined,
-                time: time || undefined,
-                notes: notes || undefined,
-              });
-              toast.success("Meetup created! Share the link with friends.");
-              navigate({
-                to: "/meetups/$id",
-                params: { id: rec.id },
-                search: { created: 1 } as never,
-              });
+              try {
+                const result = await createMeetupMutation.mutateAsync({
+                  name: finalName,
+                  type: types.find((t) => t.id === type)?.label ?? "Friends",
+                  date: date || undefined,
+                  time: time || undefined,
+                  notes: notes || undefined,
+                });
+
+                // Auto-join as first participant
+                const joined = await addParticipantMutation.mutateAsync({
+                  meetupId: result.id,
+                  name: displayName,
+                  address: myAddress.trim(),
+                  transport: myTransport,
+                });
+                setMyParticipantId(result.id, joined.id);
+
+                toast.success("Meetup created! Share the link with your group.");
+                navigate({
+                  to: "/meetups/$id",
+                  params: { id: result.id },
+                  search: { created: 1 } as never,
+                });
+              } catch {
+                toast.error("Failed to create meetup. Please try again.");
+              }
             }}
             className="space-y-8 rounded-2xl border border-border bg-card shadow-card p-6 sm:p-8"
           >
@@ -151,26 +179,48 @@ function CreateMeetup() {
               </div>
             </div>
 
-            <div className="space-y-3">
-              <Label>Travel preference (pick all that apply)</Label>
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
-                {travel.map((t) => {
-                  const active = travelMode.includes(t.id);
-                  return (
-                    <button
-                      type="button"
-                      key={t.id}
-                      onClick={() => toggleTravel(t.id)}
-                      className={cn(
-                        "p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all",
-                        active ? "border-primary bg-primary/5" : "border-border bg-background hover:border-primary/40",
-                      )}
-                    >
-                      <t.icon className={cn("h-4 w-4", active ? "text-primary" : "text-muted-foreground")} />
-                      <span className="text-xs font-medium">{t.label}</span>
-                    </button>
-                  );
-                })}
+            {/* Host location — used as first participant */}
+            <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 sm:p-5 space-y-4">
+              <div>
+                <p className="font-medium text-sm">Your starting location</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  You'll be added as the first participant — we need this to find a fair spot for everyone.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="myAddress">Where are you coming from?</Label>
+                <AddressAutocomplete
+                  id="myAddress"
+                  value={myAddress}
+                  onChange={setMyAddress}
+                  onSelect={(desc) => setMyAddress(desc)}
+                  placeholder="Your neighbourhood or address"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>How will you get there?</Label>
+                <div className="flex flex-wrap gap-2">
+                  {transportOptions.map((t) => {
+                    const active = myTransport === t.id;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setMyTransport(t.id)}
+                        className={cn(
+                          "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all",
+                          active
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border bg-background hover:border-primary/40",
+                        )}
+                      >
+                        <t.icon className="h-3.5 w-3.5" />
+                        {t.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
@@ -194,8 +244,12 @@ function CreateMeetup() {
               <Button type="button" variant="outline" className="sm:flex-1" onClick={() => navigate({ to: "/meetups" })}>
                 Cancel
               </Button>
-              <Button type="submit" className="sm:flex-[2] bg-gradient-primary shadow-elegant hover:opacity-90 h-11">
-                Create meetup
+              <Button
+                type="submit"
+                disabled={createMeetupMutation.isPending || addParticipantMutation.isPending}
+                className="sm:flex-[2] bg-gradient-primary shadow-elegant hover:opacity-90 h-11"
+              >
+                {createMeetupMutation.isPending || addParticipantMutation.isPending ? "Creating..." : "Create meetup"}
               </Button>
             </div>
           </form>
