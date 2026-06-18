@@ -1,14 +1,20 @@
-import { createFileRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, useRouterState, useSearch } from "@tanstack/react-router";
 import { AppTopbar } from "@/components/app-topbar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useMeetupsListQuery } from "@/lib/api/hooks";
+import { DeleteMeetupButton } from "@/components/DeleteMeetupButton";
 import { CalendarRange, MapPin, Plus, Users } from "lucide-react";
+
+const TABS = ["all", "waiting", "ready", "voting", "finalized"] as const;
+type Tab = (typeof TABS)[number];
 
 export const Route = createFileRoute("/_app/meetups")({
   head: () => ({ meta: [{ title: "Meetups — Gatherly" }] }),
+  validateSearch: (s: Record<string, unknown>): { tab?: Tab } =>
+    TABS.includes(s.tab as Tab) ? { tab: s.tab as Tab } : {},
   component: MeetupsLayout,
 });
 
@@ -19,6 +25,8 @@ function MeetupsLayout() {
 }
 
 function MeetupsList() {
+  const { tab = "all" } = useSearch({ from: "/_app/meetups" });
+  const navigate = Route.useNavigate();
   const { data: meetups = [], isLoading } = useMeetupsListQuery();
   return (
     <>
@@ -36,7 +44,7 @@ function MeetupsList() {
           </Button>
         </div>
 
-        <Tabs defaultValue="all">
+        <Tabs value={tab} onValueChange={(v) => navigate({ search: { tab: v as Tab } })}>
           <TabsList>
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="waiting">Waiting</TabsTrigger>
@@ -44,10 +52,10 @@ function MeetupsList() {
             <TabsTrigger value="voting">Voting</TabsTrigger>
             <TabsTrigger value="finalized">Finalized</TabsTrigger>
           </TabsList>
-          {(["all", "waiting", "ready", "voting", "finalized"] as const).map((tab) => {
-            const filtered = meetups.filter((m) => tab === "all" || m.status === tab);
+          {TABS.map((tabValue) => {
+            const filtered = meetups.filter((m) => tabValue === "all" || m.status === tabValue);
             return (
-            <TabsContent key={tab} value={tab} className="mt-6">
+            <TabsContent key={tabValue} value={tabValue} className="mt-6">
               {isLoading && (
                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {[1,2,3].map((n) => (
@@ -68,9 +76,9 @@ function MeetupsList() {
                     <CalendarRange className="h-5 w-5 text-muted-foreground" />
                   </div>
                   <p className="text-sm font-medium text-muted-foreground">
-                    {tab === "all" ? "No meetups yet" : `No ${tab} meetups`}
+                    {tabValue === "all" ? "No meetups yet" : `No ${tabValue} meetups`}
                   </p>
-                  {tab === "all" && (
+                  {tabValue === "all" && (
                     <Button asChild size="sm" className="bg-gradient-primary shadow-elegant">
                       <Link to="/meetups/create"><Plus className="h-3.5 w-3.5 mr-1.5" />Create your first</Link>
                     </Button>
@@ -88,16 +96,19 @@ function MeetupsList() {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <Badge variant="secondary" className="rounded-full capitalize">{m.type}</Badge>
-                      <Badge
-                        variant="outline"
-                        className={
-                          m.status === "voting" || m.status === "finalized"
-                            ? "bg-mint text-mint-foreground border-0"
-                            : ""
-                        }
-                      >
-                        {m.status}
-                      </Badge>
+                      <div className="flex items-center gap-1">
+                        <Badge
+                          variant="outline"
+                          className={
+                            m.status === "voting" || m.status === "finalized"
+                              ? "bg-mint text-mint-foreground border-0"
+                              : ""
+                          }
+                        >
+                          {m.status}
+                        </Badge>
+                        <DeleteMeetupButton meetupId={m.id} meetupName={m.name} />
+                      </div>
                     </div>
                     <h3 className="mt-4 font-semibold text-lg group-hover:text-primary transition-colors">{m.name}</h3>
                     {(m.date || m.time) && (

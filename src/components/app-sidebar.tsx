@@ -30,7 +30,7 @@ export function AppSidebar() {
     : "ME";
 
   return (
-    <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+    <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground sticky top-0 h-screen self-start">
       {/* Logo */}
       <div className="h-16 px-5 flex items-center border-b border-sidebar-border">
         <Logo to="/dashboard" />

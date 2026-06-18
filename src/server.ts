@@ -39,6 +39,19 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    // Intercept Better Auth routes before TanStack Start handles them.
+    // All /api/auth/* requests are handled by Better Auth's HTTP handler.
+    const url = new URL(request.url);
+    if (url.pathname.startsWith("/api/auth/")) {
+      try {
+        const { getAuth } = await import("./lib/auth/auth.server");
+        return getAuth().handler(request);
+      } catch (error) {
+        console.error("Auth handler error:", error);
+        return new Response("Internal Server Error", { status: 500 });
+      }
+    }
+
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);

@@ -28,6 +28,12 @@ const TRANSPORT_TO_GOOGLE_MODE: Record<string, string> = {
   walking: "walking",
 };
 
+// When every participant is within this radius of each other, they're already
+// close enough that a single central spot serves the whole group — no need to
+// search a grid of "fair midpoint" areas. Only spread-out groups (>5 km apart)
+// get the full fairness grid search.
+const CLOSE_RADIUS_KM = 5;
+
 type DistanceMatrixResponse = {
   status: string;
   rows: Array<{
@@ -64,6 +70,14 @@ export async function runFairnessEngine(
   }
 
   const centroid = computeCentroid(withCoords);
+
+  // Close-knit group: everyone is within CLOSE_RADIUS_KM of the centroid, so a
+  // single central area is enough — skip the grid search entirely and let users
+  // browse all the places right around them.
+  if (isCloseGroup(centroid, withCoords)) {
+    return [await buildCentralArea(centroid, withCoords, apiKey)];
+  }
+
   const candidates = generateCandidateGrid(centroid, withCoords, 8);
 
   // Reverse-geocode candidate names (best-effort)
@@ -94,6 +108,50 @@ function computeCentroid(pts: { lat: number; lng: number }[]) {
   return {
     lat: pts.reduce((s, p) => s + p.lat, 0) / pts.length,
     lng: pts.reduce((s, p) => s + p.lng, 0) / pts.length,
+  };
+}
+
+// True when every participant is within CLOSE_RADIUS_KM of the centroid AND no
+// two participants are more than CLOSE_RADIUS_KM apart — i.e. the whole group is
+// already clustered tightly enough to meet at one central spot.
+function isCloseGroup(
+  centroid: { lat: number; lng: number },
+  participants: { lat: number; lng: number }[],
+): boolean {
+  const allNearCentroid = participants.every(
+    (p) => haversineKm(centroid, p) <= CLOSE_RADIUS_KM,
+  );
+  if (!allNearCentroid) return false;
+
+  // Also check pairwise max spread (diameter) so two opposite-edge participants
+  // ~10 km apart but each <5 km from centroid don't slip through.
+  for (let i = 0; i < participants.length; i++) {
+    for (let j = i + 1; j < participants.length; j++) {
+      if (haversineKm(participants[i], participants[j]) > CLOSE_RADIUS_KM) return false;
+    }
+  }
+  return true;
+}
+
+// Builds a single "central area" for a close-knit group, scored against the
+// group's own centroid using real travel times. Only called when an API key is
+// present (the no-key path handles close groups inside haversineFallback).
+async function buildCentralArea(
+  centroid: { lat: number; lng: number },
+  participants: (ParticipantInput & { lat: number; lng: number })[],
+  apiKey: string,
+): Promise<FairnessArea> {
+  const name =
+    (await reverseGeocode(centroid.lat, centroid.lng).catch(() => null)) ?? "Central area";
+
+  const modeGroups = groupByMode(participants);
+  const matrix = await buildMatrix(participants, [centroid], modeGroups, apiKey);
+  const times = participants.map((_, pi) => matrix[pi]?.[0]?.seconds ?? Infinity);
+  const dists = participants.map((_, pi) => matrix[pi]?.[0]?.meters ?? Infinity);
+  const scored = scoreCandidate({ name, lat: centroid.lat, lng: centroid.lng }, times, dists);
+  return {
+    ...scored,
+    description: "Everyone's within 5 km — meet anywhere central.",
   };
 }
 
@@ -258,6 +316,25 @@ function haversineFallback(
 ): FairnessArea[] {
   if (participants.length < 2) return [];
   const centroid = computeCentroid(participants);
+
+  // Close-knit group: one central area, same rule as the live engine.
+  if (isCloseGroup(centroid, participants)) {
+    const distances = participants.map((p) => haversineKm(p, centroid));
+    const avgKm = distances.reduce((s, d) => s + d, 0) / distances.length;
+    const avgMin = (avgKm / 40) * 60;
+    return [
+      {
+        name: "Central area (est.)",
+        lat: centroid.lat,
+        lng: centroid.lng,
+        fairnessScore: 100,
+        avgTravelTimeMin: Math.round(avgMin),
+        avgDistanceKm: Math.round(avgKm * 10) / 10,
+        description: "Everyone's within 5 km — meet anywhere central.",
+      },
+    ];
+  }
+
   const candidates = generateCandidateGrid(centroid, participants, 5);
 
   return candidates
