@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { motion } from "motion/react";
 import {
   ArrowUpRight,
   CalendarRange,
@@ -8,7 +7,6 @@ import {
   Vote,
   Users,
   MapPin,
-  Sparkles,
   Clock,
   Trophy,
   Hourglass,
@@ -56,10 +54,10 @@ function Dashboard() {
   const totalParticipants = allMeetups.reduce((s, m) => s + m.participants.length, 0);
 
   const stats = [
-    { label: "Active meetups", value: active.length, icon: CalendarRange, accent: "text-primary" },
-    { label: "Pending votes", value: voting.length, icon: Vote, accent: "text-mint" },
-    { label: "Finalized", value: finalized.length, icon: Trophy, accent: "text-primary" },
-    { label: "Total participants", value: totalParticipants, icon: Users, accent: "text-mint" },
+    { label: "Active meetups", value: active.length, icon: CalendarRange, tile: "bg-teal-50 text-teal-600/90 dark:bg-teal-500/10 dark:text-teal-300/80", to: "/meetups" as const, search: { tab: "all" as const } },
+    { label: "Pending votes", value: voting.length, icon: Vote, tile: "bg-emerald-50 text-emerald-600/90 dark:bg-emerald-500/10 dark:text-emerald-300/80", to: "/meetups" as const, search: { tab: "voting" as const } },
+    { label: "Finalized", value: finalized.length, icon: Trophy, tile: "bg-cyan-50 text-cyan-600/90 dark:bg-cyan-500/10 dark:text-cyan-300/80", to: "/meetups" as const, search: { tab: "finalized" as const } },
+    { label: "Total participants", value: totalParticipants, icon: Users, tile: "bg-sky-50 text-sky-600/90 dark:bg-sky-500/10 dark:text-sky-300/80", to: "/meetups" as const, search: { tab: "all" as const } },
   ];
 
   return (
@@ -67,18 +65,16 @@ function Dashboard() {
       <AppTopbar title="Dashboard" />
       <main className="flex-1 px-4 sm:px-8 py-8 space-y-8">
         {/* Hero */}
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-hero text-primary-foreground p-6 sm:p-10 shadow-elegant">
-          <div className="absolute inset-0 [background-image:radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.15)_1px,transparent_0)] [background-size:24px_24px]" />
-          <div className="absolute -top-10 -right-10 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
+        <div className="relative overflow-hidden rounded-2xl bg-gradient-hero text-primary-foreground p-6 sm:p-9">
+          <div className="absolute -top-16 -right-12 h-56 w-56 rounded-full bg-white/10" />
+          <div className="absolute -bottom-20 -right-24 h-64 w-64 rounded-full bg-white/5" />
           <div className="relative grid sm:grid-cols-[1fr_auto] gap-6 items-center">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 backdrop-blur text-xs font-medium">
-                <Sparkles className="h-3.5 w-3.5" /> {timeGreeting()}, {firstName}
-              </div>
-              <h2 className="mt-3 text-3xl sm:text-4xl font-bold tracking-tight">
+              <p className="text-sm/none opacity-80">{timeGreeting()}, {firstName}</p>
+              <h2 className="mt-2 text-2xl sm:text-3xl font-bold tracking-tight">
                 {allMeetups.length === 0 ? "Ready to gather?" : `${allMeetups.length} meetup${allMeetups.length === 1 ? "" : "s"} planned`}
               </h2>
-              <p className="mt-2 opacity-90 max-w-xl text-sm sm:text-base">
+              <p className="mt-1.5 text-sm opacity-90 max-w-xl">
                 {voting.length > 0
                   ? `${voting.length} meetup${voting.length === 1 ? " needs" : "s need"} your vote right now.`
                   : waiting.length > 0
@@ -86,7 +82,7 @@ function Dashboard() {
                     : "Create a new meetup and share with your group."}
               </p>
             </div>
-            <Button asChild size="lg" variant="secondary" className="shadow-elegant shrink-0">
+            <Button asChild size="lg" variant="secondary" className="shrink-0">
               <Link to="/meetups/create">
                 <Plus className="h-4 w-4 mr-2" /> New meetup
               </Link>
@@ -96,25 +92,24 @@ function Dashboard() {
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {stats.map((s, i) => (
-            <motion.div
+          {stats.map((s) => (
+            <Link
               key={s.label}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="p-5 rounded-2xl border border-border bg-card shadow-card"
+              to={s.to}
+              search={s.search}
+              className="group block p-5 rounded-xl border border-border bg-card transition-colors hover:border-foreground/20"
             >
               <div className="flex items-center justify-between">
-                <span className={`h-9 w-9 rounded-xl grid place-items-center bg-muted ${s.accent}`}>
+                <span className={`h-9 w-9 rounded-lg grid place-items-center ${s.tile}`}>
                   <s.icon className="h-4 w-4" />
                 </span>
-                <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+                <ArrowUpRight className="h-4 w-4 text-muted-foreground/50 transition-colors group-hover:text-foreground" />
               </div>
-              <p className="mt-4 text-3xl font-bold tracking-tight">
-                {isLoading ? <span className="inline-block h-7 w-8 rounded bg-muted animate-pulse" /> : s.value}
+              <p className="mt-4 text-2xl font-bold tracking-tight">
+                {isLoading ? <span className="inline-block h-6 w-8 rounded bg-muted animate-pulse" /> : s.value}
               </p>
               <p className="text-xs text-muted-foreground mt-1">{s.label}</p>
-            </motion.div>
+            </Link>
           ))}
         </div>
 
@@ -152,7 +147,7 @@ function Dashboard() {
                 <p className="text-xs text-muted-foreground max-w-xs mx-auto">
                   Create your first meetup and Gatherly will find the fairest spot for everyone.
                 </p>
-                <Button asChild size="sm" className="bg-gradient-primary shadow-elegant mt-2">
+                <Button asChild size="sm" className="mt-2">
                   <Link to="/meetups/create"><Plus className="h-3.5 w-3.5 mr-1.5" /> New meetup</Link>
                 </Button>
               </div>
@@ -235,7 +230,7 @@ function Dashboard() {
                         </div>
                         {topArea && <FairnessScore value={topArea.fairnessScore} size="sm" />}
                       </div>
-                      <Button size="sm" asChild className="w-full bg-gradient-primary shadow-elegant hover:opacity-90">
+                      <Button size="sm" asChild className="w-full">
                         <Link to="/meetups/$id" params={{ id: m.id }} search={{ created: undefined }}>
                           Vote now
                         </Link>

@@ -31,7 +31,6 @@ import { getMyParticipantId, type MeetupStatus } from "@/lib/meetup-store";
 import { useMeetupQuery, useCastVote, useRemoveVote, useCalculateAreas, useFinalizeMeetup, useDeleteMeetup, useMeetupsListQuery, useUpdateParticipant } from "@/lib/api/hooks";
 import { useSession } from "@/lib/auth/auth-client";
 import { ShareMeetupDialog } from "@/components/share-meetup-dialog";
-import { VenueSheet } from "@/components/VenueSheet";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import type { MeetupParticipant, BestArea } from "@/components/MeetupMap";
 
@@ -40,6 +39,28 @@ const MeetupMap = lazy(() => import("@/components/MeetupMap").then((m) => ({ def
 function shortAddr(addr: string) {
   const first = addr.split(",")[0].trim();
   return first.length > 22 ? first.slice(0, 20) + "…" : first;
+}
+
+function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const R = 6371000;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(x));
+}
+
+// Radius (m) that covers every participant from the given area, so the venue
+// search spans the whole group's neighbourhoods — not just a bubble at the
+// midpoint. Adds a 1.5 km cushion and clamps to Google Places' 50 km max.
+function coverageRadius(
+  area: { lat: number; lng: number },
+  participants: { lat: number; lng: number }[],
+) {
+  if (participants.length === 0) return 2000;
+  const farthest = Math.max(...participants.map((p) => haversineMeters(area, p)));
+  return Math.min(50000, Math.round(farthest + 1500));
 }
 
 export const Route = createFileRoute("/_app/meetups/$id")({
@@ -74,7 +95,8 @@ function MeetupResults() {
   const [shareOpen, setShareOpen] = useState(false);
   const [showRecs, setShowRecs] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [venueSheet, setVenueSheet] = useState<{ areaName: string; lat: number; lng: number } | null>(null);
+
+
   const [editingAddress, setEditingAddress] = useState(false);
   const [editAddr, setEditAddr] = useState("");
   const [editTransport, setEditTransport] = useState("");
@@ -107,6 +129,21 @@ function MeetupResults() {
     return [...meetup.areas].sort((a, b) => b.fairnessScore - a.fairnessScore);
   }, [meetup?.areas]);
 
+  // Participant coordinates — used to size the venue search radius so it covers
+  // everyone's neighbourhoods, not just a bubble around the chosen area.
+  const participantCoords = useMemo(
+    () =>
+      (meetup?.participants ?? [])
+        .filter((p) => p.lat != null && p.lng != null)
+        .map((p) => ({ lat: p.lat!, lng: p.lng! })),
+    [meetup?.participants],
+  );
+
+  // Close-knit group: the engine returns a single "central area" when everyone
+  // is within 5 km, instead of a grid of fair-midpoint candidates. A spread-out
+  // group always yields multiple ranked areas, so count is a reliable signal.
+  const isCloseGroup = ranked.length === 1;
+
   // Total vote count
   const totalVotes = meetup?.votes?.length ?? 0;
 
@@ -124,6 +161,15 @@ function MeetupResults() {
     }
     return meetup.areas?.find((a) => a.id === bestId) ?? null;
   }, [meetup]);
+
+  // Best area for venue recommendations: finalized > vote winner > highest fairness.
+  const bestArea = useMemo(() => {
+    if (!meetup) return null;
+    const finalized = meetup.finalizedAreaId
+      ? meetup.areas?.find((a) => a.id === meetup.finalizedAreaId)
+      : null;
+    return finalized ?? winner ?? ranked[0] ?? null;
+  }, [meetup, winner, ranked]);
 
   if (isLoading) {
     return (
@@ -302,9 +348,15 @@ function MeetupResults() {
               })()}
               <div className="p-5 sm:p-6 flex flex-wrap gap-4 items-center justify-between">
                 <div>
-                  <p className="text-xs uppercase tracking-wider text-muted-foreground">Top pick</p>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                    {isCloseGroup ? "Central spot" : "Top pick"}
+                  </p>
                   <h3 className="text-xl font-semibold mt-1">{ranked[0]?.name ?? "—"}</h3>
-                  <p className="text-sm text-muted-foreground">Highest fairness score · {ranked.length} areas found</p>
+                  <p className="text-sm text-muted-foreground">
+                    {isCloseGroup
+                      ? "Everyone's within 5 km — browse places anywhere around here"
+                      : `Highest fairness score · ${ranked.length} areas found`}
+                  </p>
                 </div>
                 <FairnessScore value={ranked[0]?.fairnessScore ?? 0} size="lg" />
               </div>
@@ -381,12 +433,13 @@ function MeetupResults() {
                           </div>
                         </div>
                         <div className="flex flex-col gap-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setVenueSheet({ areaName: a.name, lat: a.lat, lng: a.lng })}
-                          >
-                            View venues
+                          <Button size="sm" variant="outline" asChild>
+                            <Link
+                              to="/venues"
+                              search={{ area: a.name, lat: a.lat, lng: a.lng, radius: coverageRadius(a, participantCoords) }}
+                            >
+                              View venues
+                            </Link>
                           </Button>
                           <Button
                             size="sm"
@@ -575,7 +628,18 @@ function MeetupResults() {
             </section>
 
             <Button size="lg" className="w-full bg-gradient-primary shadow-elegant hover:opacity-90" asChild>
-              <Link to="/venues" search={{ area: undefined }}><MapPin className="h-4 w-4 mr-2" /> Browse venues</Link>
+              {bestArea ? (
+                <Link
+                  to="/venues"
+                  search={{ area: bestArea.name, lat: bestArea.lat, lng: bestArea.lng, radius: coverageRadius(bestArea, participantCoords) }}
+                >
+                  <MapPin className="h-4 w-4 mr-2" /> Browse venues near {bestArea.name}
+                </Link>
+              ) : (
+                <Link to="/venues" search={{ area: undefined, lat: undefined, lng: undefined, radius: undefined }}>
+                  <MapPin className="h-4 w-4 mr-2" /> Browse venues
+                </Link>
+              )}
             </Button>
           </aside>
         </div>
@@ -585,14 +649,6 @@ function MeetupResults() {
           onOpenChange={setShareOpen}
           meetupId={meetup.id}
           meetupName={meetup.name}
-        />
-
-        <VenueSheet
-          open={!!venueSheet}
-          onOpenChange={(v) => { if (!v) setVenueSheet(null); }}
-          areaName={venueSheet?.areaName ?? ""}
-          lat={venueSheet?.lat ?? 0}
-          lng={venueSheet?.lng ?? 0}
         />
       </main>
     </>
