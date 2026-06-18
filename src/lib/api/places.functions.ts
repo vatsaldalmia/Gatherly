@@ -70,7 +70,27 @@ export const getNearbyPlaces = createServerFn({ method: "GET" })
       throw new Response(`Places API: ${json.status}`, { status: 502 });
     }
 
-    const places: NearbyPlace[] = (json.results ?? []).slice(0, 12).map((r) => ({
+    const raw = json.results ?? [];
+
+    // Rank by review quality using a Bayesian (IMDB-style) weighted rating so a
+    // 5.0 with 3 reviews doesn't outrank a 4.6 with thousands. Score blends each
+    // place's rating toward the global mean, weighted by how many reviews it has.
+    const rated = raw.filter((r) => r.rating != null && r.user_ratings_total != null);
+    const meanRating =
+      rated.length > 0
+        ? rated.reduce((s, r) => s + (r.rating ?? 0), 0) / rated.length
+        : 4;
+    const MIN_VOTES = 50; // reviews needed before a place's own rating dominates
+
+    const weightedScore = (r: { rating?: number; user_ratings_total?: number }) => {
+      const v = r.user_ratings_total ?? 0;
+      const R = r.rating ?? 0;
+      return (v / (v + MIN_VOTES)) * R + (MIN_VOTES / (v + MIN_VOTES)) * meanRating;
+    };
+
+    const ranked = [...raw].sort((a, b) => weightedScore(b) - weightedScore(a));
+
+    const places: NearbyPlace[] = ranked.slice(0, 12).map((r) => ({
       placeId: r.place_id,
       name: r.name,
       rating: r.rating ?? null,

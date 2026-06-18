@@ -1,72 +1,122 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppTopbar } from "@/components/app-topbar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { meetups } from "@/lib/dummy-data";
-import { MapPin, Calendar, Users } from "lucide-react";
+import { useSession } from "@/lib/auth/auth-client";
+import { useMeetupsListQuery } from "@/lib/api/hooks";
+import { MapPin, Calendar, Users, CalendarRange } from "lucide-react";
 
 export const Route = createFileRoute("/_app/profile")({
   head: () => ({ meta: [{ title: "Profile — Gatherly" }] }),
   component: ProfilePage,
 });
 
+function initialsOf(name: string) {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
 function ProfilePage() {
+  const { data: session } = useSession();
+  const { data: meetups = [] } = useMeetupsListQuery();
+  const user = session?.user;
+
+  const name = user?.name ?? "You";
+  const email = user?.email ?? "";
+
+  // Real stats derived from the user's meetups
+  const totalParticipants = meetups.reduce((s, m) => s + m.participants.length, 0);
+  const finalizedCount = meetups.filter((m) => m.finalizedAreaId).length;
   const stats = [
-    { label: "Meetups planned", value: 24, icon: Calendar },
-    { label: "Friends connected", value: 38, icon: Users },
-    { label: "Cities explored", value: 6, icon: MapPin },
+    { label: "Meetups planned", value: meetups.length, icon: Calendar },
+    { label: "People gathered", value: totalParticipants, icon: Users },
+    { label: "Spots finalized", value: finalizedCount, icon: MapPin },
   ];
+
+  const recent = [...meetups].slice(0, 6);
+
   return (
     <>
       <AppTopbar title="Profile" />
-      <main className="flex-1 px-4 sm:px-8 py-8 space-y-8">
-        <div className="rounded-3xl border border-border bg-card shadow-card overflow-hidden">
-          <div className="h-40 bg-gradient-hero" />
-          <div className="px-6 sm:px-8 pb-6 -mt-12">
-            <Avatar className="h-24 w-24 ring-4 ring-card shadow-elegant">
-              <AvatarImage src="https://i.pravatar.cc/200?img=12" />
-              <AvatarFallback>AM</AvatarFallback>
+      <main className="flex-1 px-4 sm:px-8 py-8 space-y-6">
+        <div className="rounded-2xl border border-border bg-card overflow-hidden">
+          <div className="h-28 bg-gradient-hero" />
+          <div className="px-6 sm:px-8 pb-6 -mt-10">
+            <Avatar className="h-20 w-20 ring-4 ring-card">
+              <AvatarImage src={user?.image ?? undefined} />
+              <AvatarFallback className="text-lg font-bold bg-gradient-primary text-primary-foreground">
+                {initialsOf(name)}
+              </AvatarFallback>
             </Avatar>
             <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] gap-3 items-center">
               <div className="min-w-0">
-                <h2 className="text-2xl font-bold truncate">Aarav Mehta</h2>
-                <p className="text-muted-foreground text-sm">aarav@gatherly.app · Mumbai, India</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Badge variant="secondary" className="rounded-full">Pro member</Badge>
-                  <Badge variant="outline" className="rounded-full">Verified</Badge>
-                </div>
+                <h2 className="text-2xl font-bold truncate">{name}</h2>
+                <p className="text-muted-foreground text-sm truncate">{email}</p>
+                {user?.emailVerified && (
+                  <div className="mt-2">
+                    <Badge variant="outline" className="rounded-full">Verified</Badge>
+                  </div>
+                )}
               </div>
-              <Button variant="outline">Edit profile</Button>
+              <Button variant="outline" asChild>
+                <Link to="/settings">Edit profile</Link>
+              </Button>
             </div>
           </div>
         </div>
 
         <div className="grid sm:grid-cols-3 gap-4">
           {stats.map((s) => (
-            <div key={s.label} className="p-5 rounded-2xl border border-border bg-card shadow-card">
+            <div key={s.label} className="p-5 rounded-xl border border-border bg-card">
               <s.icon className="h-5 w-5 text-primary" />
-              <p className="mt-3 text-3xl font-bold tracking-tight">{s.value}</p>
+              <p className="mt-3 text-2xl font-bold tracking-tight">{s.value}</p>
               <p className="text-sm text-muted-foreground">{s.label}</p>
             </div>
           ))}
         </div>
 
-        <section className="rounded-2xl border border-border bg-card shadow-card">
+        <section className="rounded-xl border border-border bg-card">
           <div className="p-5 sm:p-6 border-b border-border">
             <h3 className="text-lg font-semibold">Recent meetups</h3>
           </div>
-          <div className="divide-y divide-border">
-            {meetups.map((m) => (
-              <div key={m.id} className="p-5 sm:p-6 grid grid-cols-[minmax(0,1fr)_auto] gap-4 items-center">
-                <div className="min-w-0">
-                  <p className="font-semibold truncate">{m.name}</p>
-                  <p className="text-sm text-muted-foreground">{m.date} · {m.type}</p>
-                </div>
-                <Badge variant="outline" className="capitalize">{m.status}</Badge>
+          {recent.length === 0 ? (
+            <div className="p-10 text-center space-y-3">
+              <div className="mx-auto h-11 w-11 rounded-full bg-muted grid place-items-center">
+                <CalendarRange className="h-5 w-5 text-muted-foreground" />
               </div>
-            ))}
-          </div>
+              <p className="text-sm text-muted-foreground">No meetups yet.</p>
+              <Button size="sm" asChild>
+                <Link to="/meetups/create">Create your first</Link>
+              </Button>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {recent.map((m) => (
+                <Link
+                  key={m.id}
+                  to="/meetups/$id"
+                  params={{ id: m.id }}
+                  search={{ created: undefined }}
+                  className="block p-5 sm:p-6 hover:bg-muted/40 transition-colors"
+                >
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-4 items-center">
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate">{m.name}</p>
+                      <p className="text-sm text-muted-foreground capitalize">
+                        {m.date ? `${m.date} · ` : ""}{m.type} · {m.participants.length} joined
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="capitalize">{m.status}</Badge>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </section>
       </main>
     </>
