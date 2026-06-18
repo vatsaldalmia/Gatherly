@@ -36,9 +36,12 @@ export const calculateAreas = createServerFn({ method: "POST" })
     await db.delete(areas).where(eq(areas.meetupId, data.meetupId));
 
     const now = new Date();
+    let firstAreaId: string | null = null;
     for (const a of computed) {
+      const areaId = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+      if (!firstAreaId) firstAreaId = areaId;
       await db.insert(areas).values({
-        id: crypto.randomUUID().replace(/-/g, "").slice(0, 8),
+        id: areaId,
         meetupId: data.meetupId,
         name: a.name,
         lat: a.lat,
@@ -51,8 +54,14 @@ export const calculateAreas = createServerFn({ method: "POST" })
       });
     }
 
-    // Advance to voting status
-    if (meetup.status === "ready") {
+    // Close-knit group: the engine returns a single central area, so there's
+    // nothing to vote on — finalize it straight away. Otherwise open voting.
+    if (computed.length <= 1) {
+      await db
+        .update(meetups)
+        .set({ status: "finalized", finalizedAreaId: firstAreaId, updatedAt: now })
+        .where(eq(meetups.id, data.meetupId));
+    } else if (meetup.status === "ready" || meetup.status === "waiting") {
       await db
         .update(meetups)
         .set({ status: "voting", updatedAt: now })

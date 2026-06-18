@@ -1,10 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
 import { AppTopbar } from "@/components/app-topbar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "@/components/theme-provider";
+import { authClient, useSession } from "@/lib/auth/auth-client";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/settings")({
@@ -14,6 +17,31 @@ export const Route = createFileRoute("/_app/settings")({
 
 function SettingsPage() {
   const { theme, toggle } = useTheme();
+  const { data: session } = useSession();
+  const user = session?.user;
+
+  const [name, setName] = useState(user?.name ?? "");
+  const [saving, setSaving] = useState(false);
+
+  // Keep the field in sync once the session loads.
+  if (user && name === "" && user.name) setName(user.name);
+
+  const saveAccount = async () => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toast.error("Name can't be empty.");
+      return;
+    }
+    setSaving(true);
+    const { error } = await authClient.updateUser({ name: trimmed });
+    setSaving(false);
+    if (error) {
+      toast.error("Couldn't save changes.");
+    } else {
+      toast.success("Profile updated.");
+    }
+  };
+
   return (
     <>
       <AppTopbar title="Settings" />
@@ -23,12 +51,18 @@ function SettingsPage() {
         <section className="rounded-2xl border border-border bg-card shadow-card p-6 space-y-4">
           <h3 className="font-semibold">Account</h3>
           <div className="grid sm:grid-cols-2 gap-4">
-            <div className="space-y-2"><Label>Full name</Label><Input defaultValue="Aarav Mehta" /></div>
-            <div className="space-y-2"><Label>Email</Label><Input defaultValue="aarav@gatherly.app" /></div>
-            <div className="space-y-2"><Label>City</Label><Input defaultValue="Mumbai" /></div>
-            <div className="space-y-2"><Label>Phone</Label><Input defaultValue="+91 98765 43210" /></div>
+            <div className="space-y-2">
+              <Label htmlFor="name">Full name</Label>
+              <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input id="email" value={user?.email ?? ""} disabled readOnly />
+            </div>
           </div>
-          <Button onClick={() => toast.success("Saved")} className="bg-gradient-primary shadow-elegant hover:opacity-90">Save changes</Button>
+          <Button onClick={saveAccount} disabled={saving}>
+            {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving…</> : "Save changes"}
+          </Button>
         </section>
 
         <section className="rounded-2xl border border-border bg-card shadow-card p-6 space-y-4">
