@@ -10,6 +10,7 @@ import {
   Clock,
   Trophy,
   Hourglass,
+  Utensils,
 } from "lucide-react";
 import { AppTopbar } from "@/components/app-topbar";
 import { Button } from "@/components/ui/button";
@@ -18,7 +19,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { FairnessScore } from "@/components/fairness-score";
 import { useMeetupsListQuery } from "@/lib/api/hooks";
 import { useSession } from "@/lib/auth/auth-client";
-import type { ParticipantPin } from "@/components/TestMap";
+import type { ParticipantPin, SearchedPlace } from "@/components/TestMap";
 
 const TestMap = lazy(() => import("@/components/TestMap"));
 
@@ -54,10 +55,10 @@ function Dashboard() {
   const totalParticipants = allMeetups.reduce((s, m) => s + m.participants.length, 0);
 
   const stats = [
-    { label: "Active meetups", value: active.length, icon: CalendarRange, tile: "bg-teal-50 text-teal-600/90 dark:bg-teal-500/10 dark:text-teal-300/80", to: "/meetups" as const, search: { tab: "all" as const } },
-    { label: "Pending votes", value: voting.length, icon: Vote, tile: "bg-emerald-50 text-emerald-600/90 dark:bg-emerald-500/10 dark:text-emerald-300/80", to: "/meetups" as const, search: { tab: "voting" as const } },
-    { label: "Finalized", value: finalized.length, icon: Trophy, tile: "bg-cyan-50 text-cyan-600/90 dark:bg-cyan-500/10 dark:text-cyan-300/80", to: "/meetups" as const, search: { tab: "finalized" as const } },
-    { label: "Total participants", value: totalParticipants, icon: Users, tile: "bg-sky-50 text-sky-600/90 dark:bg-sky-500/10 dark:text-sky-300/80", to: "/meetups" as const, search: { tab: "all" as const } },
+    { label: "Active meetups", value: active.length, icon: CalendarRange, tile: "bg-primary/10 text-primary", to: "/meetups" as const, search: { tab: "all" as const } },
+    { label: "Pending votes", value: voting.length, icon: Vote, tile: "bg-amber-100 text-amber-700 dark:bg-amber-400/15 dark:text-amber-300", to: "/meetups" as const, search: { tab: "voting" as const } },
+    { label: "Finalized", value: finalized.length, icon: Trophy, tile: "bg-orange-100 text-orange-600 dark:bg-orange-400/15 dark:text-orange-300", to: "/meetups" as const, search: { tab: "finalized" as const } },
+    { label: "Total participants", value: totalParticipants, icon: Users, tile: "bg-rose-100 text-rose-500 dark:bg-rose-400/15 dark:text-rose-300", to: "/meetups" as const, search: { tab: "all" as const } },
   ];
 
   return (
@@ -97,7 +98,7 @@ function Dashboard() {
               key={s.label}
               to={s.to}
               search={s.search}
-              className="group block p-5 rounded-xl border border-border bg-card transition-colors hover:border-foreground/20"
+              className="group block p-5 rounded-xl border border-border bg-card transition-all duration-200 hover:border-primary/50 hover:shadow-card-hover hover:-translate-y-0.5"
             >
               <div className="flex items-center justify-between">
                 <span className={`h-9 w-9 rounded-lg grid place-items-center ${s.tile}`}>
@@ -116,7 +117,7 @@ function Dashboard() {
         {/* Meetup list + Vote panel */}
         <div className="grid lg:grid-cols-[1.4fr_1fr] gap-6">
           {/* All meetups */}
-          <section className="rounded-2xl border border-border bg-card shadow-card">
+          <section className="rounded-2xl border border-border bg-card shadow-card transition-all duration-200 hover:border-primary/50 hover:shadow-card-hover">
             <div className="p-5 sm:p-6 border-b border-border flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold">Your meetups</h3>
@@ -199,7 +200,7 @@ function Dashboard() {
           </section>
 
           {/* Pending votes */}
-          <section className="rounded-2xl border border-border bg-card shadow-card p-5 sm:p-6">
+          <section className="rounded-2xl border border-border bg-card shadow-card p-5 sm:p-6 transition-all duration-200 hover:border-primary/50 hover:shadow-card-hover">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-semibold">Pending your vote</h3>
               {voting.length > 0 && (
@@ -252,6 +253,7 @@ function Dashboard() {
 
 function DashboardMap() {
   const [mounted, setMounted] = useState(false);
+  const [searched, setSearched] = useState<SearchedPlace | null>(null);
   const { data: liveMeetups = [] } = useMeetupsListQuery();
 
   const participants = useMemo<ParticipantPin[]>(() => {
@@ -266,15 +268,22 @@ function DashboardMap() {
     return pins;
   }, [liveMeetups]);
 
+  const handleSearch = (place: SearchedPlace | null) => {
+    setSearched(place);
+    if (place) {
+      sessionStorage.setItem("lastMapSearch", JSON.stringify(place));
+    }
+  };
+
   useEffect(() => {
     setMounted(true);
   }, []);
 
   return (
-    <section className="rounded-2xl border border-border bg-card shadow-card overflow-hidden">
+    <section className="rounded-2xl border border-border bg-card shadow-card overflow-hidden transition-all duration-200 hover:border-primary/50 hover:shadow-card-hover">
       <div className="p-5 sm:p-6 border-b border-border flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold">Meetup map</h3>
+          <h3 className="text-lg font-semibold text-primary">Meetup map</h3>
           <p className="text-sm text-muted-foreground">
             {participants.length > 0
               ? `${participants.length} participant${participants.length === 1 ? "" : "s"} across your meetups`
@@ -295,10 +304,27 @@ function DashboardMap() {
             </div>
           }
         >
-          <TestMap participants={participants} />
+          <TestMap participants={participants} onSearch={handleSearch} />
         </Suspense>
       ) : (
         <div className="h-[500px] bg-muted/40 animate-pulse" />
+      )}
+      {/* Venues button — appears below the map after a location is searched */}
+      {searched && (
+        <div className="px-5 py-4 border-t border-border bg-muted/30 flex items-center justify-between gap-4">
+          <p className="text-sm text-muted-foreground truncate">
+            Showing venues near <span className="font-medium text-foreground">{searched.name}</span>
+          </p>
+          <Button asChild size="sm" className="shrink-0">
+            <Link
+              to="/venues"
+              search={{ area: searched.name, lat: searched.lat, lng: searched.lng, radius: 4500 }}
+            >
+              <Utensils className="h-3.5 w-3.5 mr-1.5" />
+              See venues
+            </Link>
+          </Button>
+        </div>
       )}
     </section>
   );

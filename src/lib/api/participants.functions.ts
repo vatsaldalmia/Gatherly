@@ -2,10 +2,11 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { eq, count } from "drizzle-orm";
 import { getDb } from "../db/index.server";
-import { participants, meetups } from "../db/schema";
+import { participants, meetups, areas as areasTable } from "../db/schema";
 import { geocodeAddress } from "../maps/geocoding.server";
+import { runFairnessEngine } from "../fairness/engine.server";
 
-const TransportEnum = z.enum(["walking", "bike", "car", "taxi", "metro", "train", "bus"]);
+const TransportEnum = z.enum(["walking", "bicycle", "2-wheeler", "auto", "car", "taxi", "metro", "train", "bus"]);
 
 const AddParticipantInput = z.object({
   meetupId: z.string(),
@@ -59,6 +60,57 @@ export const addParticipant = createServerFn({ method: "POST" })
         .update(meetups)
         .set({ status: "ready", updatedAt: now })
         .where(eq(meetups.id, data.meetupId));
+    }
+
+    // Auto-recalculate areas when a new participant joins and areas already exist
+    // (i.e. the host has already run "Find best area" at least once)
+    if (lat != null && lng != null) {
+      const existingAreas = await db
+        .select({ id: areasTable.id })
+        .from(areasTable)
+        .where(eq(areasTable.meetupId, data.meetupId))
+        .limit(1);
+
+      if (existingAreas.length > 0) {
+        try {
+          const allParticipants = await db.query.participants.findMany({
+            where: eq(participants.meetupId, data.meetupId),
+          });
+          const computed = await runFairnessEngine(allParticipants);
+          const recalcAt = new Date();
+          await db.delete(areasTable).where(eq(areasTable.meetupId, data.meetupId));
+          let firstAreaId: string | null = null;
+          for (const a of computed) {
+            const areaId = crypto.randomUUID().replace(/-/g, "").slice(0, 8);
+            if (!firstAreaId) firstAreaId = areaId;
+            await db.insert(areasTable).values({
+              id: areaId,
+              meetupId: data.meetupId,
+              name: a.name,
+              lat: a.lat,
+              lng: a.lng,
+              fairnessScore: a.fairnessScore,
+              avgTravelTimeMin: a.avgTravelTimeMin,
+              avgDistanceKm: a.avgDistanceKm,
+              description: a.description,
+              computedAt: recalcAt,
+            });
+          }
+          if (computed.length <= 1) {
+            await db
+              .update(meetups)
+              .set({ status: "finalized", finalizedAreaId: firstAreaId, updatedAt: recalcAt })
+              .where(eq(meetups.id, data.meetupId));
+          } else {
+            await db
+              .update(meetups)
+              .set({ status: "voting", updatedAt: recalcAt })
+              .where(eq(meetups.id, data.meetupId));
+          }
+        } catch {
+          // Recalculation is best-effort — join still succeeds even if this fails
+        }
+      }
     }
 
     return { id, lat, lng };

@@ -1,34 +1,45 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 
-type Theme = "light" | "dark";
-const ThemeCtx = createContext<{ theme: Theme; toggle: () => void }>({
-  theme: "light",
-  toggle: () => {},
-});
+export type Theme = "light" | "dark" | "system";
+
+type ThemeCtxValue = { theme: Theme; setTheme: (t: Theme) => void };
+const ThemeCtx = createContext<ThemeCtxValue>({ theme: "system", setTheme: () => {} });
+
+function resolvedTheme(theme: Theme): "light" | "dark" {
+  if (theme !== "system") return theme;
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light");
+  const [theme, setThemeState] = useState<Theme>("system");
 
+  // Hydrate from localStorage
   useEffect(() => {
-    const stored = (typeof window !== "undefined" && localStorage.getItem("theme")) as Theme | null;
-    const prefersDark =
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const initial: Theme = stored ?? (prefersDark ? "dark" : "light");
-    setTheme(initial);
+    const stored = localStorage.getItem("theme") as Theme | null;
+    if (stored === "light" || stored === "dark" || stored === "system") {
+      setThemeState(stored);
+    }
   }, []);
 
+  // Apply class to <html> and listen for system changes
   useEffect(() => {
-    const root = document.documentElement;
-    root.classList.toggle("dark", theme === "dark");
-    localStorage.setItem("theme", theme);
+    const apply = () => {
+      document.documentElement.classList.toggle("dark", resolvedTheme(theme) === "dark");
+    };
+    apply();
+    if (theme === "system") {
+      const mq = window.matchMedia("(prefers-color-scheme: dark)");
+      mq.addEventListener("change", apply);
+      return () => mq.removeEventListener("change", apply);
+    }
   }, [theme]);
 
-  return (
-    <ThemeCtx.Provider value={{ theme, toggle: () => setTheme((t) => (t === "dark" ? "light" : "dark")) }}>
-      {children}
-    </ThemeCtx.Provider>
-  );
+  const setTheme = (t: Theme) => {
+    localStorage.setItem("theme", t);
+    setThemeState(t);
+  };
+
+  return <ThemeCtx.Provider value={{ theme, setTheme }}>{children}</ThemeCtx.Provider>;
 }
 
 export const useTheme = () => useContext(ThemeCtx);

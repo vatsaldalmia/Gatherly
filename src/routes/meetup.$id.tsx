@@ -38,7 +38,9 @@ export const Route = createFileRoute("/meetup/$id")({
 
 const transportIcons: Record<TransportMode, typeof Footprints> = {
   walking: Footprints,
-  bike: Bike,
+  bicycle: Bike,
+  "2-wheeler": Bike,
+  auto: CarTaxiFront,
   car: Car,
   taxi: CarTaxiFront,
   metro: TrainFront,

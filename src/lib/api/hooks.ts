@@ -61,8 +61,25 @@ export function useUpdateParticipant() {
   return useMutation({
     mutationFn: (input: Parameters<typeof updateParticipant>[0]["data"]) =>
       updateParticipant({ data: input }),
-    onSuccess: (_, vars) =>
-      qc.invalidateQueries({ queryKey: meetupKeys.detail(vars.meetupId) }),
+    onSuccess: async (result, vars) => {
+      // Check cache before invalidation to see if areas already exist
+      const cached = qc.getQueryData<Awaited<ReturnType<typeof getMeetup>>>(
+        meetupKeys.detail(vars.meetupId),
+      );
+      const hasAreas = (cached?.areas?.length ?? 0) > 0;
+      const hasCoords = result.lat != null && result.lng != null;
+
+      await qc.invalidateQueries({ queryKey: meetupKeys.detail(vars.meetupId) });
+
+      if (hasAreas && hasCoords) {
+        try {
+          await calculateAreas({ data: { meetupId: vars.meetupId } });
+          await qc.invalidateQueries({ queryKey: meetupKeys.detail(vars.meetupId) });
+        } catch {
+          // Best-effort
+        }
+      }
+    },
   });
 }
 

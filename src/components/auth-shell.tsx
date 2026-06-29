@@ -1,8 +1,14 @@
-import { type ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
+import { type ReactNode, useState } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
-import { Sparkles } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Sparkles, Loader2, Phone, Mail } from "lucide-react";
+import { signIn } from "@/lib/auth/auth-client";
+import { authClient } from "@/lib/auth/auth-client";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 export function AuthShell({
   title,
@@ -56,16 +62,214 @@ export function AuthShell({
 }
 
 export function SocialButtons() {
+  const [loading, setLoading] = useState(false);
+
+  const handleGoogle = async () => {
+    setLoading(true);
+    await signIn.social({ provider: "google", callbackURL: "/dashboard" });
+    setLoading(false);
+  };
+
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <Button variant="outline" className="h-11">
-        <svg className="h-4 w-4 mr-2" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.3 35.5 24 35.5c-6.4 0-11.5-5.1-11.5-11.5S17.6 12.5 24 12.5c3 0 5.7 1.1 7.7 2.9l5.7-5.7C33.9 6.5 29.2 4.5 24 4.5 13.2 4.5 4.5 13.2 4.5 24S13.2 43.5 24 43.5c11 0 19.5-8 19.5-19.5 0-1.3-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3 0 5.7 1.1 7.7 2.9l5.7-5.7C33.9 7 29.2 5 24 5 16.3 5 9.7 9.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 43.5c5.1 0 9.7-2 13.2-5.2l-6.1-5c-2 1.4-4.5 2.2-7.1 2.2-5.3 0-9.7-3-11.3-7.4l-6.5 5C9.6 39.2 16.3 43.5 24 43.5z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.6l6.1 5c-.4.4 6.5-4.7 6.5-14.6 0-1.3-.1-2.3-.4-3.5z"/></svg>
-        Google
-      </Button>
-      <Button variant="outline" className="h-11">
-        <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 12.04c-.03-3.16 2.58-4.68 2.7-4.75-1.47-2.15-3.76-2.45-4.57-2.48-1.95-.2-3.8 1.15-4.79 1.15-.99 0-2.51-1.12-4.12-1.09-2.12.03-4.08 1.23-5.17 3.13-2.2 3.83-.56 9.5 1.59 12.6 1.05 1.52 2.3 3.22 3.93 3.16 1.58-.06 2.18-1.02 4.09-1.02 1.91 0 2.45 1.02 4.12.99 1.7-.03 2.78-1.55 3.82-3.07 1.2-1.76 1.7-3.47 1.72-3.56-.04-.02-3.3-1.27-3.34-5.06zM14.04 3.06c.87-1.06 1.46-2.53 1.3-4-1.25.05-2.77.83-3.67 1.89-.8.93-1.5 2.43-1.31 3.87 1.4.11 2.81-.71 3.68-1.76z"/></svg>
-        Apple
-      </Button>
+    <Button
+      variant="outline"
+      className="w-full h-12 text-base font-medium"
+      onClick={handleGoogle}
+      disabled={loading}
+    >
+      {loading ? (
+        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+      ) : (
+        <svg className="h-5 w-5 mr-2.5" viewBox="0 0 48 48">
+          <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.3 35.5 24 35.5c-6.4 0-11.5-5.1-11.5-11.5S17.6 12.5 24 12.5c3 0 5.7 1.1 7.7 2.9l5.7-5.7C33.9 6.5 29.2 4.5 24 4.5 13.2 4.5 4.5 13.2 4.5 24S13.2 43.5 24 43.5c11 0 19.5-8 19.5-19.5 0-1.3-.1-2.3-.4-3.5z"/>
+          <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3 0 5.7 1.1 7.7 2.9l5.7-5.7C33.9 7 29.2 5 24 5 16.3 5 9.7 9.3 6.3 14.7z"/>
+          <path fill="#4CAF50" d="M24 43.5c5.1 0 9.7-2 13.2-5.2l-6.1-5c-2 1.4-4.5 2.2-7.1 2.2-5.3 0-9.7-3-11.3-7.4l-6.5 5C9.6 39.2 16.3 43.5 24 43.5z"/>
+          <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.2-4.2 5.6l6.1 5c-.4.4 6.5-4.7 6.5-14.6 0-1.3-.1-2.3-.4-3.5z"/>
+        </svg>
+      )}
+      Continue with Google
+    </Button>
+  );
+}
+
+export function AuthMethodTabs({
+  activeTab,
+  onChange,
+}: {
+  activeTab: "phone" | "email";
+  onChange: (tab: "phone" | "email") => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-1 p-1 bg-muted rounded-lg">
+      {(["phone", "email"] as const).map((tab) => (
+        <button
+          key={tab}
+          type="button"
+          onClick={() => onChange(tab)}
+          className={cn(
+            "flex items-center justify-center gap-2 py-2 text-sm font-medium rounded-md transition-all",
+            activeTab === tab
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {tab === "phone" ? <Phone className="h-3.5 w-3.5" /> : <Mail className="h-3.5 w-3.5" />}
+          {tab === "phone" ? "Phone" : "Email"}
+        </button>
+      ))}
     </div>
+  );
+}
+
+export function PhoneOTPForm({ requireName = false }: { requireName?: boolean }) {
+  const navigate = useNavigate();
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [rawDigits, setRawDigits] = useState("");
+  const [otp, setOtp] = useState("");
+  const [step, setStep] = useState<"phone" | "otp">("phone");
+  const [loading, setLoading] = useState(false);
+
+  const handleSendOTP = async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!phone.trim()) return;
+    if (requireName && !name.trim()) return;
+    setLoading(true);
+    try {
+      // @ts-ignore — phoneNumber plugin adds this method
+      const result = await authClient.phoneNumber.sendOtp({ phoneNumber: phone });
+      if (result?.error) {
+        toast.error(result.error.message ?? "Failed to send OTP");
+        return;
+      }
+      toast.success("OTP sent to your phone!");
+      setStep("otp");
+    } catch {
+      toast.error("Could not send OTP. Check the number and try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    if (!otp.trim()) return;
+    setLoading(true);
+    try {
+      // @ts-ignore — phoneNumber plugin adds this method
+      const result = await signIn.phoneNumber({ phoneNumber: phone, code: otp, callbackURL: "/dashboard" });
+      if (result?.error) {
+        toast.error(result.error.message ?? "Invalid OTP");
+        return;
+      }
+      // Save the name the user entered
+      await authClient.updateUser({ name: name.trim() }).catch(() => {});
+      toast.success("Welcome to Gatherly!");
+      navigate({ to: "/dashboard" });
+    } catch {
+      toast.error("Verification failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (step === "otp") {
+    return (
+      <form onSubmit={handleVerifyOTP} className="space-y-4">
+        <div className="space-y-1">
+          <p className="text-sm text-muted-foreground">
+            OTP sent to <span className="font-medium text-foreground">{phone}</span>
+          </p>
+          <button
+            type="button"
+            className="text-xs text-primary hover:underline"
+            onClick={() => { setStep("phone"); setOtp(""); }}
+          >
+            Change number
+          </button>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="otp">6-digit OTP</Label>
+          <Input
+            id="otp"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]{6}"
+            maxLength={6}
+            placeholder="• • • • • •"
+            required
+            className="h-11 tracking-[0.4em] text-center font-mono text-lg"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            autoFocus
+          />
+        </div>
+        <Button
+          type="submit"
+          disabled={loading || otp.length < 6}
+          className="w-full h-11 bg-gradient-primary shadow-elegant hover:opacity-90"
+        >
+          {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+          {loading ? "Verifying…" : "Verify & Continue"}
+        </Button>
+        <button
+          type="button"
+          className="w-full text-xs text-muted-foreground hover:text-foreground text-center"
+          onClick={handleSendOTP}
+          disabled={loading}
+        >
+          Didn't receive it? Resend OTP
+        </button>
+      </form>
+    );
+  }
+
+  return (
+    <form onSubmit={handleSendOTP} className="space-y-4">
+      {requireName && (
+        <div className="space-y-2">
+          <Label htmlFor="phone-name">Your name</Label>
+          <Input
+            id="phone-name"
+            type="text"
+            placeholder="Aarav Mehta"
+            required
+            className="h-11"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+      )}
+      <div className="space-y-2">
+        <Label htmlFor="phone">Phone number</Label>
+        <div className="flex gap-2">
+          <div className="flex items-center h-11 px-3 border border-input rounded-md bg-muted text-sm font-medium text-muted-foreground shrink-0">
+            🇮🇳 +91
+          </div>
+          <Input
+            id="phone"
+            type="tel"
+            inputMode="numeric"
+            placeholder="98765 43210"
+            required
+            className="h-11 flex-1"
+            value={rawDigits}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+              setRawDigits(digits);
+              setPhone(digits ? `+91${digits}` : "");
+            }}
+          />
+        </div>
+      </div>
+      <Button
+        type="submit"
+        disabled={loading}
+        className="w-full h-11 bg-gradient-primary shadow-elegant hover:opacity-90"
+      >
+        {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+        {loading ? "Sending OTP…" : "Send OTP"}
+      </Button>
+    </form>
   );
 }

@@ -1,6 +1,6 @@
 import { createFileRoute, useSearch, useRouter } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { AppTopbar } from "@/components/app-topbar";
 import { Button } from "@/components/ui/button";
 import { getNearbyPlaces, type NearbyPlace } from "@/lib/api/places.functions";
@@ -33,27 +33,40 @@ function priceStr(level: number | null) {
 }
 
 type Coords = { lat: number; lng: number };
+type NamedCoords = Coords & { name: string };
 
 function VenuesPage() {
   const { area, lat, lng, radius } = useSearch({ from: "/_app/venues" });
   const router = useRouter();
   const [cat, setCat] = useState("restaurant");
 
-  // Coords come from a meetup's best area (via search params) or browser geolocation.
-  const meetupCoords: Coords | null = lat != null && lng != null ? { lat, lng } : null;
+  const fromDashboard = lat != null && lng != null;
+  const urlCoords: NamedCoords | null = fromDashboard
+    ? { lat: lat!, lng: lng!, name: area ?? "Selected area" }
+    : null;
+
+  // Restore last map search from session when navigating here directly
+  const [savedSearch] = useState<NamedCoords | null>(() => {
+    if (fromDashboard) return null;
+    try {
+      const raw = sessionStorage.getItem("lastMapSearch");
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { lat: number; lng: number; name: string };
+      if (parsed.lat && parsed.lng) return parsed;
+    } catch { /* ignore */ }
+    return null;
+  });
+
   const [geo, setGeo] = useState<Coords | null>(null);
   const [geoState, setGeoState] = useState<"idle" | "locating" | "denied" | "unsupported">("idle");
-  const coords = meetupCoords ?? geo;
 
-  // For a meetup we widen the search to cover everyone's neighbourhoods (passed
-  // via `radius`); for standalone "near me" browsing we default to ~4.5 km.
+  // URL params → last map search → geolocation
+  const coords: Coords | null = urlCoords ?? savedSearch ?? geo;
+  const locationLabel = urlCoords?.name ?? savedSearch?.name ?? null;
   const searchRadius = Math.min(50000, Math.max(1000, radius ?? 4500));
 
   const requestLocation = () => {
-    if (!navigator.geolocation) {
-      setGeoState("unsupported");
-      return;
-    }
+    if (!navigator.geolocation) { setGeoState("unsupported"); return; }
     setGeoState("locating");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -65,20 +78,48 @@ function VenuesPage() {
     );
   };
 
-  // Auto-ask for location when there's no meetup context yet.
   useEffect(() => {
-    if (!meetupCoords && !geo && geoState === "idle") requestLocation();
+    if (!fromDashboard && !savedSearch && !geo && geoState === "idle") requestLocation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { data: places, isLoading, error } = useQuery({
+  const { data, isLoading, isFetchingNextPage, fetchNextPage, hasNextPage, error } = useInfiniteQuery({
     queryKey: ["venues-nearby", coords?.lat, coords?.lng, cat, searchRadius],
-    queryFn: () => getNearbyPlaces({ data: { lat: coords!.lat, lng: coords!.lng, type: cat, radius: searchRadius } }),
+    queryFn: ({ pageParam }) =>
+      getNearbyPlaces({
+        data: { lat: coords!.lat, lng: coords!.lng, type: cat, radius: searchRadius, pageToken: pageParam },
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextPageToken ?? undefined,
     enabled: !!coords,
     staleTime: 5 * 60 * 1000,
   });
 
-  const fromMeetup = !!meetupCoords;
+  const GLOBAL_MEAN = 4.0;
+  const MIN_VOTES = 50;
+  const weightedScore = (rating: number | null, votes: number | null) => {
+    const v = votes ?? 0;
+    const R = rating ?? 0;
+    return (v / (v + MIN_VOTES)) * R + (MIN_VOTES / (v + MIN_VOTES)) * GLOBAL_MEAN;
+  };
+
+  const places = (data?.pages.flatMap((p) => p.places) ?? []).sort(
+    (a, b) => weightedScore(b.rating, b.userRatingsTotal) - weightedScore(a.rating, a.userRatingsTotal),
+  );
+
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasNextPage && !isFetchingNextPage) fetchNextPage();
+      },
+      { rootMargin: "300px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return (
     <>
@@ -92,21 +133,18 @@ function VenuesPage() {
         >
           <ArrowLeft className="h-4 w-4 mr-1.5" /> Back
         </Button>
+
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Venues nearby</h2>
           <p className="text-muted-foreground text-sm mt-1">
-            {fromMeetup ? (
-              <>
-                Places
-                {area ? <> near <span className="text-foreground font-medium">{area}</span></> : null}
-                {" "}within {(searchRadius / 1000).toFixed(1)} km, sorted by rating.
-              </>
+            {locationLabel ? (
+              <>Places near <span className="text-foreground font-medium">{locationLabel}</span>{radius ? ` within ${(searchRadius / 1000).toFixed(1)} km` : ""}.</>
             ) : geoState === "locating" ? (
               "Finding your location…"
             ) : coords ? (
-              "Places near you, sorted by rating."
+              "Places near your current location, sorted by rating."
             ) : (
-              "Enable location to see places near you."
+              "Enable location access to see venues near you."
             )}
           </p>
         </div>
@@ -120,8 +158,8 @@ function VenuesPage() {
               className={cn(
                 "px-3.5 py-1.5 rounded-lg text-sm font-medium border transition-colors",
                 cat === c.id
-                  ? "bg-foreground text-background border-foreground"
-                  : "border-border bg-card text-muted-foreground hover:text-foreground hover:bg-muted",
+                  ? "bg-primary text-primary-foreground border-primary shadow-sm"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5",
               )}
             >
               {c.label}
@@ -129,29 +167,29 @@ function VenuesPage() {
           ))}
         </div>
 
-        {/* Location gate — no coords yet (standalone mode) */}
+        {/* Location gate — no coords yet (standalone, geo not granted) */}
         {!coords && (
           <div className="rounded-xl border border-border bg-card p-10 text-center">
             {geoState === "locating" ? (
               <>
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mx-auto" />
+                <Loader2 className="h-6 w-6 animate-spin text-primary mx-auto" />
                 <p className="text-sm text-muted-foreground mt-3">Detecting your location…</p>
               </>
             ) : (
               <>
-                <Navigation className="h-7 w-7 text-muted-foreground mx-auto" />
-                <h3 className="mt-3 font-semibold">
-                  {geoState === "unsupported" ? "Location not available" : "Share your location"}
-                </h3>
+                <div className="mx-auto h-12 w-12 rounded-full bg-primary/10 grid place-items-center">
+                  <MapPin className="h-6 w-6 text-primary" />
+                </div>
+                <h3 className="mt-3 font-semibold">Find venues near you</h3>
                 <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
                   {geoState === "denied"
-                    ? "We couldn't access your location. Enable it in your browser, then try again."
+                    ? "Location access was denied. Enable it in your browser settings and try again."
                     : geoState === "unsupported"
-                      ? "Your browser doesn't support geolocation. Open a meetup to see venues for your group."
-                      : "We'll show real places right around you."}
+                      ? "Your browser doesn't support geolocation. Search from the dashboard map to find venues."
+                      : "Share your location to discover the best places around you."}
                 </p>
                 {geoState !== "unsupported" && (
-                  <Button variant="outline" className="mt-4" onClick={requestLocation}>
+                  <Button className="mt-4" onClick={requestLocation}>
                     <Navigation className="h-4 w-4 mr-2" /> Use my location
                   </Button>
                 )}
@@ -160,11 +198,11 @@ function VenuesPage() {
           </div>
         )}
 
-        {/* Loading places */}
+        {/* Initial loading */}
         {coords && isLoading && (
-          <div className="py-16 grid place-items-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground mt-3">Finding places…</p>
+          <div className="py-16 grid place-items-center gap-3">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <p className="text-sm text-muted-foreground">Finding places…</p>
           </div>
         )}
 
@@ -176,18 +214,35 @@ function VenuesPage() {
         )}
 
         {/* No results */}
-        {coords && !isLoading && !error && places?.length === 0 && (
-          <div className="rounded-xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">
-            No {CATS.find((c) => c.id === cat)?.label.toLowerCase()} found nearby. Try a different category.
+        {coords && !isLoading && !error && places.length === 0 && (
+          <div className="rounded-xl border border-border bg-card p-10 text-center space-y-2">
+            <div className="mx-auto h-10 w-10 rounded-full bg-muted grid place-items-center">
+              <MapPin className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <p className="text-sm font-medium">No {CATS.find((c) => c.id === cat)?.label.toLowerCase()} found nearby.</p>
+            <p className="text-xs text-muted-foreground">Try a different category.</p>
           </div>
         )}
 
-        {/* Results grid */}
-        {coords && !isLoading && places && places.length > 0 && (
+        {/* Results grid + infinite scroll */}
+        {coords && !isLoading && places.length > 0 && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {places.map((v) => (
               <VenueCard key={v.placeId} v={v} />
             ))}
+            <div ref={sentinelRef} className="col-span-full">
+              {isFetchingNextPage && (
+                <div className="py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  Loading more venues…
+                </div>
+              )}
+              {!hasNextPage && places.length > 0 && (
+                <p className="py-6 text-center text-xs text-muted-foreground/60">
+                  All {places.length} venues loaded
+                </p>
+              )}
+            </div>
           </div>
         )}
       </main>
@@ -201,26 +256,32 @@ function VenueCard({ v }: { v: NearbyPlace }) {
       href={v.mapsUrl}
       target="_blank"
       rel="noreferrer"
-      className="group rounded-xl overflow-hidden border border-border bg-card hover:border-foreground/20 transition-colors flex flex-col"
+      className="group rounded-xl overflow-hidden border border-border bg-card hover:border-primary/50 hover:shadow-card-hover hover:-translate-y-0.5 transition-all duration-200 flex flex-col"
     >
       <div className="aspect-[3/2] overflow-hidden relative bg-muted">
         {v.photoUrl ? (
-          <img src={v.photoUrl} alt={v.name} className="w-full h-full object-cover" />
+          <img src={v.photoUrl} alt={v.name} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
         ) : (
-          <div className="w-full h-full grid place-items-center">
-            <MapPin className="h-7 w-7 text-muted-foreground/30" />
+          <div className="w-full h-full grid place-items-center bg-primary/5">
+            <MapPin className="h-8 w-8 text-primary/30" />
           </div>
+        )}
+        {v.openNow != null && (
+          <span className={cn(
+            "absolute top-2 right-2 text-[10px] font-semibold px-2 py-0.5 rounded-full",
+            v.openNow ? "bg-emerald-500/90 text-white" : "bg-black/50 text-white/80",
+          )}>
+            {v.openNow ? "Open" : "Closed"}
+          </span>
         )}
       </div>
       <div className="p-3.5 flex flex-col flex-1">
-        <h3 className="font-semibold text-sm leading-snug truncate">{v.name}</h3>
-
-        {/* Rating line — Maps/Yelp style */}
-        <div className="flex items-center gap-1.5 mt-1 text-xs">
+        <h3 className="font-semibold text-sm leading-snug truncate group-hover:text-primary transition-colors">{v.name}</h3>
+        <div className="flex items-center gap-1.5 mt-1.5 text-xs">
           {v.rating != null ? (
             <>
-              <span className="font-medium text-foreground">{v.rating.toFixed(1)}</span>
-              <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+              <Star className="h-3 w-3 fill-amber-400 text-amber-400 shrink-0" />
+              <span className="font-semibold text-foreground">{v.rating.toFixed(1)}</span>
               {v.userRatingsTotal != null && v.userRatingsTotal > 0 && (
                 <span className="text-muted-foreground">
                   ({v.userRatingsTotal > 999 ? `${(v.userRatingsTotal / 1000).toFixed(1)}k` : v.userRatingsTotal})
@@ -237,14 +298,12 @@ function VenueCard({ v }: { v: NearbyPlace }) {
             </>
           )}
         </div>
-
-        <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{v.vicinity}</p>
-
-        {v.openNow != null && (
-          <p className={cn("text-xs font-medium mt-2", v.openNow ? "text-emerald-600" : "text-muted-foreground")}>
-            {v.openNow ? "Open now" : "Closed"}
-          </p>
-        )}
+        <p className="text-xs text-muted-foreground mt-2 line-clamp-2 flex-1">{v.vicinity}</p>
+        <div className="mt-3 pt-3 border-t border-border/60">
+          <span className="text-xs text-primary font-medium flex items-center gap-1">
+            <MapPin className="h-3 w-3" /> View on Maps
+          </span>
+        </div>
       </div>
     </a>
   );

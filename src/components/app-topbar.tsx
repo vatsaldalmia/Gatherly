@@ -1,7 +1,6 @@
 import { Link } from "@tanstack/react-router";
-import { Bell, Search } from "lucide-react";
+import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/theme-toggle";
 
@@ -10,12 +9,9 @@ export function AppTopbar({ title }: { title?: string }) {
     <header className="sticky top-0 z-30 h-16 border-b border-border bg-background/80 backdrop-blur-lg">
       <div className="h-full px-4 sm:px-6 flex items-center gap-3">
         {title && (
-          <h1 className="hidden md:block text-lg font-semibold truncate">{title}</h1>
+          <h1 className="text-lg font-semibold truncate">{title}</h1>
         )}
-        <div className="flex-1 max-w-md ml-auto md:ml-6 relative">
-          <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search meetups, places, friends..." className="pl-9" />
-        </div>
+        <div className="flex-1" />
         <ThemeToggle />
         <Button variant="ghost" size="icon" aria-label="Notifications">
           <Bell className="h-4 w-4" />
