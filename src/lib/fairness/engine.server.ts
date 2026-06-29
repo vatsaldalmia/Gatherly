@@ -21,9 +21,13 @@ export type FairnessArea = {
 const TRANSPORT_TO_GOOGLE_MODE: Record<string, string> = {
   car: "driving",
   taxi: "driving",
+  auto: "driving",
+  "2-wheeler": "driving",
+  motorbike: "driving",
   metro: "transit",
   bus: "transit",
   train: "transit",
+  bicycle: "bicycling",
   bike: "bicycling",
   walking: "walking",
 };
@@ -40,6 +44,7 @@ type DistanceMatrixResponse = {
     elements: Array<{
       status: string;
       duration: { value: number };
+      duration_in_traffic?: { value: number };
       distance: { value: number };
     }>;
   }>;
@@ -47,6 +52,7 @@ type DistanceMatrixResponse = {
 
 export async function runFairnessEngine(
   participantList: ParticipantInput[],
+  meetupAt?: Date,
 ): Promise<FairnessArea[]> {
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
 
@@ -75,7 +81,7 @@ export async function runFairnessEngine(
   // single central area is enough — skip the grid search entirely and let users
   // browse all the places right around them.
   if (isCloseGroup(centroid, withCoords)) {
-    return [await buildCentralArea(centroid, withCoords, apiKey)];
+    return [await buildCentralArea(centroid, withCoords, apiKey, meetupAt)];
   }
 
   const candidates = generateCandidateGrid(centroid, withCoords, 8);
@@ -92,7 +98,25 @@ export async function runFairnessEngine(
   const modeGroups = groupByMode(withCoords);
 
   // Build travel time matrix: participantIdx → candidateIdx → { seconds, meters }
-  const matrix = await buildMatrix(withCoords, namedCandidates, modeGroups, apiKey);
+  const matrix = await buildMatrix(withCoords, namedCandidates, modeGroups, apiKey, meetupAt);
+
+  // Fill haversine estimates for any participant/candidate pair the API couldn't route
+  // (e.g. bicycling routes unavailable in India). Silently excluding participants causes
+  // biased scores that ignore the outlier entirely.
+  const HAVERSINE_SPEED: Record<string, number> = {
+    driving: 30, transit: 25, bicycling: 15, walking: 5, auto: 25, motorbike: 35,
+  };
+  withCoords.forEach((p, pi) => {
+    const mode = TRANSPORT_TO_GOOGLE_MODE[p.transport] ?? "driving";
+    const kph = HAVERSINE_SPEED[mode] ?? 30;
+    namedCandidates.forEach((c, ci) => {
+      if (!matrix[pi]?.[ci]) {
+        if (!matrix[pi]) matrix[pi] = {};
+        const km = haversineKm({ lat: p.lat, lng: p.lng }, c);
+        matrix[pi][ci] = { seconds: (km / kph) * 3600, meters: km * 1000 };
+      }
+    });
+  });
 
   // Score and sort
   const scored = namedCandidates.map((c, ci) => {
@@ -140,12 +164,13 @@ async function buildCentralArea(
   centroid: { lat: number; lng: number },
   participants: (ParticipantInput & { lat: number; lng: number })[],
   apiKey: string,
+  meetupAt?: Date,
 ): Promise<FairnessArea> {
   const name =
     (await reverseGeocode(centroid.lat, centroid.lng).catch(() => null)) ?? "Central area";
 
   const modeGroups = groupByMode(participants);
-  const matrix = await buildMatrix(participants, [centroid], modeGroups, apiKey);
+  const matrix = await buildMatrix(participants, [centroid], modeGroups, apiKey, meetupAt);
   const times = participants.map((_, pi) => matrix[pi]?.[0]?.seconds ?? Infinity);
   const dists = participants.map((_, pi) => matrix[pi]?.[0]?.meters ?? Infinity);
   const scored = scoreCandidate({ name, lat: centroid.lat, lng: centroid.lng }, times, dists);
@@ -223,20 +248,33 @@ async function buildMatrix(
   candidates: { lat: number; lng: number }[],
   modeGroups: Map<string, number[]>,
   apiKey: string,
+  meetupAt?: Date,
 ): Promise<Record<number, Record<number, { seconds: number; meters: number }>>> {
   const matrix: Record<number, Record<number, { seconds: number; meters: number }>> = {};
+
+  // For driving: use the meetup time if it's in the future, otherwise use now.
+  // departure_time gives real traffic-aware estimates from Google.
+  const drivingDepartureTs = (() => {
+    const base = meetupAt && meetupAt.getTime() > Date.now() ? meetupAt : new Date();
+    return Math.floor(base.getTime() / 1000);
+  })();
 
   for (const [mode, pIdxs] of modeGroups) {
     const origins = pIdxs.map((i) => `${participants[i].lat},${participants[i].lng}`).join("|");
     const destinations = candidates.map((c) => `${c.lat},${c.lng}`).join("|");
 
-    const url =
+    let url =
       `https://maps.googleapis.com/maps/api/distancematrix/json` +
       `?origins=${encodeURIComponent(origins)}` +
       `&destinations=${encodeURIComponent(destinations)}` +
       `&mode=${mode}` +
       `&units=metric` +
       `&key=${apiKey}`;
+
+    // departure_time + traffic_model only supported for driving
+    if (mode === "driving") {
+      url += `&departure_time=${drivingDepartureTs}&traffic_model=best_guess`;
+    }
 
     let json: DistanceMatrixResponse;
     try {
@@ -252,7 +290,8 @@ async function buildMatrix(
       matrix[pIdx] = matrix[pIdx] ?? {};
       json.rows[rowIdx]?.elements.forEach((el, ci) => {
         if (el.status === "OK") {
-          matrix[pIdx][ci] = { seconds: el.duration.value, meters: el.distance.value };
+          const seconds = el.duration_in_traffic?.value ?? el.duration.value;
+          matrix[pIdx][ci] = { seconds, meters: el.distance.value };
         }
       });
     });
@@ -286,11 +325,13 @@ function scoreCandidate(
   );
 
   // Normalise components (0=worst, 1=best). Weights sum to 1.
-  const normTime = Math.max(0, Math.min(1, 1 - avgSec / 60 / 60)); // 60-min ceiling
-  const normVariance = Math.max(0, Math.min(1, 1 - stdDev / 60 / 30)); // 30-min stddev ceiling
-  const normMax = Math.max(0, Math.min(1, 1 - maxSec / 60 / 90)); // 90-min worst-case ceiling
+  // Ceilings are set for realistic Indian city conditions with traffic.
+  const normTime = Math.max(0, Math.min(1, 1 - avgSec / (120 * 60)));     // 120-min avg ceiling
+  const normVariance = Math.max(0, Math.min(1, 1 - stdDev / (60 * 60)));  // 60-min stddev ceiling
+  const normMax = Math.max(0, Math.min(1, 1 - maxSec / (150 * 60)));      // 150-min worst-case ceiling
 
-  const rawScore = normTime * 0.35 + normVariance * 0.45 + normMax * 0.2;
+  // normMax gets extra weight to protect the most disadvantaged participant
+  const rawScore = normTime * 0.25 + normVariance * 0.45 + normMax * 0.30;
 
   const validDists = distancesMeters.filter((d) => d < Infinity);
   const avgDistKm =
@@ -321,13 +362,22 @@ function haversineFallback(
   if (isCloseGroup(centroid, participants)) {
     const distances = participants.map((p) => haversineKm(p, centroid));
     const avgKm = distances.reduce((s, d) => s + d, 0) / distances.length;
+    const maxKm = Math.max(...distances);
+    const stdDev = Math.sqrt(
+      distances.reduce((s, d) => s + (d - avgKm) ** 2, 0) / distances.length,
+    );
     const avgMin = (avgKm / 40) * 60;
+    const maxMin = (maxKm / 40) * 60;
+    const normTime = Math.max(0, Math.min(1, 1 - avgMin / 120));
+    const normVariance = Math.max(0, Math.min(1, 1 - (stdDev / 40 * 60) / 60));
+    const normMax = Math.max(0, Math.min(1, 1 - maxMin / 150));
+    const rawScore = normTime * 0.25 + normVariance * 0.45 + normMax * 0.30;
     return [
       {
         name: "Central area (est.)",
         lat: centroid.lat,
         lng: centroid.lng,
-        fairnessScore: 100,
+        fairnessScore: Math.round(rawScore * 100),
         avgTravelTimeMin: Math.round(avgMin),
         avgDistanceKm: Math.round(avgKm * 10) / 10,
         description: "Everyone's within 5 km — meet anywhere central.",
@@ -348,10 +398,10 @@ function haversineFallback(
       );
       const avgMin = (avgKm / 40) * 60;
       const maxMin = (maxKm / 40) * 60;
-      const normTime = Math.max(0, Math.min(1, 1 - avgMin / 60));
-      const normVariance = Math.max(0, Math.min(1, 1 - (stdDev / 40 * 60) / 30));
-      const normMax = Math.max(0, Math.min(1, 1 - maxMin / 90));
-      const rawScore = normTime * 0.35 + normVariance * 0.45 + normMax * 0.2;
+      const normTime = Math.max(0, Math.min(1, 1 - avgMin / 120));
+      const normVariance = Math.max(0, Math.min(1, 1 - (stdDev / 40 * 60) / 60));
+      const normMax = Math.max(0, Math.min(1, 1 - maxMin / 150));
+      const rawScore = normTime * 0.25 + normVariance * 0.45 + normMax * 0.30;
       return {
         name: `Area ${i + 1} (est.)`,
         lat: c.lat,

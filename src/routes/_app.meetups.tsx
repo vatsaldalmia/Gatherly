@@ -92,7 +92,7 @@ function MeetupsList() {
                     to="/meetups/$id"
                     params={{ id: m.id }}
                     search={{ created: undefined }}
-                    className="group p-5 rounded-2xl border border-border bg-card shadow-card hover:shadow-elegant hover:border-primary/40 transition-all flex flex-col"
+                    className="group p-5 rounded-2xl border border-border bg-card shadow-card hover:shadow-card-hover hover:border-primary/50 hover:-translate-y-0.5 transition-all duration-200 flex flex-col"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <Badge variant="secondary" className="rounded-full capitalize">{m.type}</Badge>

@@ -55,7 +55,9 @@ const types = [
 
 const transportOptions: { id: TransportMode; label: string; icon: typeof Car }[] = [
   { id: "car", label: "Car", icon: Car },
-  { id: "bike", label: "Bike", icon: Bike },
+  { id: "bicycle", label: "Bicycle", icon: Bike },
+  { id: "2-wheeler", label: "2-Wheeler", icon: Bike },
+  { id: "auto", label: "Auto", icon: CarTaxiFront },
   { id: "metro", label: "Metro", icon: TrainFront },
   { id: "train", label: "Train", icon: Train },
   { id: "bus", label: "Bus", icon: Bus },

@@ -55,123 +55,124 @@
 :root {
   --radius: 0.875rem;
 
-  /* Background with very subtle cool tint */
-  --background: oklch(0.984 0.004 210);
-  --foreground: oklch(0.19 0.018 220);
+  /* Background — barely-warm off-white (Claude paper) */
+  --background: oklch(0.988 0.004 60);
+  --foreground: oklch(0.21 0.015 50);
 
   /* Cards: pure white */
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.19 0.018 220);
+  --card-foreground: oklch(0.21 0.015 50);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.19 0.018 220);
+  --popover-foreground: oklch(0.21 0.015 50);
 
-  /* Matte teal primary — calm, map/navigation feel */
-  --primary: oklch(0.55 0.085 198);
-  --primary-foreground: oklch(0.99 0.004 200);
-  --primary-glow: oklch(0.67 0.075 192);
+  /* Claude orange primary — #D97757, warm clay-coral */
+  --primary: oklch(0.672 0.131 39);
+  --primary-foreground: oklch(0.99 0.005 60);
+  --primary-glow: oklch(0.73 0.118 42);
 
-  --secondary: oklch(0.965 0.008 210);
-  --secondary-foreground: oklch(0.24 0.025 218);
+  --secondary: oklch(0.967 0.008 60);
+  --secondary-foreground: oklch(0.26 0.016 50);
 
-  --muted: oklch(0.965 0.006 210);
-  --muted-foreground: oklch(0.52 0.016 218);
+  --muted: oklch(0.967 0.006 60);
+  --muted-foreground: oklch(0.53 0.013 52);
 
-  --accent: oklch(0.86 0.07 172);
-  --accent-foreground: oklch(0.24 0.05 172);
+  /* Warm coral accent */
+  --accent: oklch(0.90 0.055 36);
+  --accent-foreground: oklch(0.28 0.05 36);
 
-  --mint: oklch(0.80 0.085 168);
-  --mint-foreground: oklch(0.22 0.05 168);
+  --mint: oklch(0.85 0.075 38);
+  --mint-foreground: oklch(0.26 0.05 36);
 
-  --destructive: oklch(0.57 0.16 25);
-  --destructive-foreground: oklch(0.99 0.004 270);
+  --destructive: oklch(0.55 0.17 24);
+  --destructive-foreground: oklch(0.99 0.004 55);
 
   /* Borders */
-  --border: oklch(0.90 0.01 215);
-  --input: oklch(0.93 0.008 215);
-  --ring: oklch(0.55 0.085 198);
+  --border: oklch(0.872 0.012 56);
+  --input: oklch(0.900 0.010 56);
+  --ring: oklch(0.672 0.131 39);
 
-  --chart-1: oklch(0.55 0.085 198);
-  --chart-2: oklch(0.72 0.09 168);
-  --chart-3: oklch(0.62 0.08 230);
-  --chart-4: oklch(0.74 0.1 84);
-  --chart-5: oklch(0.6 0.13 35);
+  --chart-1: oklch(0.672 0.131 39);
+  --chart-2: oklch(0.70 0.115 30);
+  --chart-3: oklch(0.64 0.10 22);
+  --chart-4: oklch(0.75 0.115 70);
+  --chart-5: oklch(0.62 0.13 14);
 
-  --sidebar: oklch(0.99 0.003 210);
-  --sidebar-foreground: oklch(0.24 0.018 218);
-  --sidebar-primary: oklch(0.55 0.085 198);
-  --sidebar-primary-foreground: oklch(0.99 0.004 200);
-  --sidebar-accent: oklch(0.955 0.008 210);
-  --sidebar-accent-foreground: oklch(0.24 0.025 218);
-  --sidebar-border: oklch(0.9 0.009 215);
-  --sidebar-ring: oklch(0.55 0.085 198);
+  --sidebar: oklch(0.991 0.004 60);
+  --sidebar-foreground: oklch(0.26 0.015 50);
+  --sidebar-primary: oklch(0.672 0.131 39);
+  --sidebar-primary-foreground: oklch(0.99 0.005 60);
+  --sidebar-accent: oklch(0.958 0.008 60);
+  --sidebar-accent-foreground: oklch(0.26 0.016 50);
+  --sidebar-border: oklch(0.872 0.011 56);
+  --sidebar-ring: oklch(0.672 0.131 39);
 
-  /* Gradients — matte teal */
+  /* Gradients — Claude clay to warm coral */
   --gradient-hero: linear-gradient(135deg,
-    oklch(0.44 0.075 205) 0%,
-    oklch(0.5 0.08 192) 55%,
-    oklch(0.56 0.07 175) 100%);
+    oklch(0.58 0.130 44) 0%,
+    oklch(0.628 0.135 39) 55%,
+    oklch(0.66 0.120 30) 100%);
   --gradient-primary: linear-gradient(135deg, var(--primary) 0%, var(--primary-glow) 100%);
-  --gradient-mint: linear-gradient(135deg, var(--mint), oklch(0.88 0.07 172));
-  --gradient-card: linear-gradient(145deg, oklch(1 0 0) 0%, oklch(0.97 0.006 210) 100%);
+  --gradient-mint: linear-gradient(135deg, var(--mint), oklch(0.90 0.055 32));
+  --gradient-card: linear-gradient(145deg, oklch(1 0 0) 0%, oklch(0.975 0.005 60) 100%);
 
-  /* Shadows */
-  --shadow-card: 0 1px 2px oklch(0.4 0.03 210 / 0.04),
+  /* Shadows — soft + low-contrast for a matte finish */
+  --shadow-card: 0 1px 2px oklch(0.35 0.03 45 / 0.04),
     0 4px 16px -4px oklch(0 0 0 / 0.06);
-  --shadow-card-hover: 0 1px 2px oklch(0.4 0.03 210 / 0.06),
-    0 8px 30px -6px oklch(0.4 0.03 210 / 0.14);
-  --shadow-elegant: 0 20px 60px -20px color-mix(in oklab, var(--primary) 35%, transparent);
-  --shadow-glow: 0 0 50px color-mix(in oklab, var(--primary-glow) 35%, transparent);
+  --shadow-card-hover: 0 1px 2px oklch(0.35 0.03 45 / 0.06),
+    0 8px 30px -6px oklch(0.35 0.03 45 / 0.13);
+  --shadow-elegant: 0 20px 60px -20px color-mix(in oklab, var(--primary) 26%, transparent);
+  --shadow-glow: 0 0 50px color-mix(in oklab, var(--primary-glow) 26%, transparent);
   --shadow-input: 0 1px 2px oklch(0 0 0 / 0.05);
 }
 
 .dark {
-  --background: oklch(0.16 0.012 220);
-  --foreground: oklch(0.96 0.004 210);
-  --card: oklch(0.21 0.014 220);
-  --card-foreground: oklch(0.96 0.004 210);
-  --popover: oklch(0.21 0.014 220);
-  --popover-foreground: oklch(0.96 0.004 210);
-  --primary: oklch(0.68 0.09 192);
-  --primary-foreground: oklch(0.16 0.02 210);
-  --primary-glow: oklch(0.76 0.08 188);
-  --secondary: oklch(0.27 0.016 218);
-  --secondary-foreground: oklch(0.96 0.004 210);
-  --muted: oklch(0.25 0.014 218);
-  --muted-foreground: oklch(0.68 0.014 215);
-  --accent: oklch(0.72 0.09 172);
-  --accent-foreground: oklch(0.16 0.04 172);
-  --mint: oklch(0.72 0.09 168);
-  --mint-foreground: oklch(0.16 0.04 168);
-  --destructive: oklch(0.62 0.16 25);
-  --destructive-foreground: oklch(0.96 0.004 210);
-  --border: oklch(1 0 0 / 9%);
-  --input: oklch(1 0 0 / 11%);
-  --ring: oklch(0.68 0.09 192);
-  --chart-1: oklch(0.68 0.09 192);
-  --chart-2: oklch(0.72 0.09 168);
-  --chart-3: oklch(0.66 0.08 230);
-  --chart-4: oklch(0.76 0.1 84);
-  --chart-5: oklch(0.64 0.13 35);
-  --sidebar: oklch(0.19 0.014 220);
-  --sidebar-foreground: oklch(0.96 0.004 210);
-  --sidebar-primary: oklch(0.68 0.09 192);
-  --sidebar-primary-foreground: oklch(0.16 0.02 210);
-  --sidebar-accent: oklch(0.25 0.016 218);
-  --sidebar-accent-foreground: oklch(0.96 0.004 210);
-  --sidebar-border: oklch(1 0 0 / 9%);
-  --sidebar-ring: oklch(0.68 0.09 192);
+  --background: oklch(0.185 0.011 48);
+  --foreground: oklch(0.95 0.004 60);
+  --card: oklch(0.23 0.012 48);
+  --card-foreground: oklch(0.95 0.004 60);
+  --popover: oklch(0.23 0.012 48);
+  --popover-foreground: oklch(0.95 0.004 60);
+  --primary: oklch(0.715 0.125 41);
+  --primary-foreground: oklch(0.18 0.014 48);
+  --primary-glow: oklch(0.76 0.115 44);
+  --secondary: oklch(0.285 0.011 50);
+  --secondary-foreground: oklch(0.95 0.004 60);
+  --muted: oklch(0.27 0.009 50);
+  --muted-foreground: oklch(0.68 0.011 54);
+  --accent: oklch(0.66 0.105 38);
+  --accent-foreground: oklch(0.18 0.05 36);
+  --mint: oklch(0.66 0.105 38);
+  --mint-foreground: oklch(0.18 0.05 36);
+  --destructive: oklch(0.60 0.17 24);
+  --destructive-foreground: oklch(0.95 0.004 60);
+  --border: oklch(1 0 0 / 14%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.715 0.125 41);
+  --chart-1: oklch(0.715 0.125 41);
+  --chart-2: oklch(0.68 0.11 30);
+  --chart-3: oklch(0.63 0.10 22);
+  --chart-4: oklch(0.75 0.115 70);
+  --chart-5: oklch(0.63 0.13 14);
+  --sidebar: oklch(0.21 0.011 48);
+  --sidebar-foreground: oklch(0.95 0.004 60);
+  --sidebar-primary: oklch(0.715 0.125 41);
+  --sidebar-primary-foreground: oklch(0.18 0.014 48);
+  --sidebar-accent: oklch(0.27 0.011 50);
+  --sidebar-accent-foreground: oklch(0.95 0.004 60);
+  --sidebar-border: oklch(1 0 0 / 14%);
+  --sidebar-ring: oklch(0.715 0.125 41);
   --gradient-hero: linear-gradient(135deg,
-    oklch(0.30 0.06 205) 0%,
-    oklch(0.32 0.065 192) 55%,
-    oklch(0.34 0.055 175) 100%);
+    oklch(0.35 0.085 44) 0%,
+    oklch(0.38 0.090 39) 55%,
+    oklch(0.40 0.080 30) 100%);
   --gradient-primary: linear-gradient(135deg, var(--primary), var(--primary-glow));
-  --gradient-mint: linear-gradient(135deg, var(--mint), oklch(0.6 0.08 172));
-  --gradient-card: linear-gradient(145deg, oklch(0.23 0.015 220) 0%, oklch(0.2 0.013 220) 100%);
+  --gradient-mint: linear-gradient(135deg, var(--mint), oklch(0.56 0.080 30));
+  --gradient-card: linear-gradient(145deg, oklch(0.25 0.012 48) 0%, oklch(0.22 0.011 48) 100%);
   --shadow-card: 0 1px 2px oklch(0 0 0 / 0.3), 0 4px 16px -4px oklch(0 0 0 / 0.4);
   --shadow-card-hover: 0 1px 2px oklch(0 0 0 / 0.4),
-    0 8px 30px -6px color-mix(in oklab, var(--primary) 25%, oklch(0 0 0 / 0.4));
-  --shadow-elegant: 0 20px 60px -20px color-mix(in oklab, var(--primary) 45%, transparent);
-  --shadow-glow: 0 0 50px color-mix(in oklab, var(--primary-glow) 45%, transparent);
+    0 8px 30px -6px color-mix(in oklab, var(--primary) 20%, oklch(0 0 0 / 0.4));
+  --shadow-elegant: 0 20px 60px -20px color-mix(in oklab, var(--primary) 38%, transparent);
+  --shadow-glow: 0 0 50px color-mix(in oklab, var(--primary-glow) 38%, transparent);
   --shadow-input: 0 1px 2px oklch(0 0 0 / 0.3);
 }
 
@@ -286,4 +287,66 @@
 @utility bg-dot-grid {
   background-image: radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0);
   background-size: 24px 24px;
+}
+
+/* ── Google Maps Places Autocomplete ──────────────────────────────────────── */
+
+.pac-container {
+  margin-top: 6px;
+  border-radius: 0.875rem !important;
+  border: 1px solid var(--border) !important;
+  background-color: var(--card) !important;
+  box-shadow: var(--shadow-card-hover) !important;
+  font-family: var(--font-sans) !important;
+  overflow: hidden;
+  padding: 0 !important;
+}
+
+/* hide the "Powered by Google" logo row */
+.pac-container::after {
+  display: none !important;
+}
+
+.pac-item {
+  padding: 9px 16px !important;
+  cursor: pointer;
+  color: var(--foreground) !important;
+  background-color: transparent !important;
+  border-top: 1px solid var(--border) !important;
+  font-size: 0.8125rem !important;
+  line-height: 1.4 !important;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pac-item:first-child {
+  border-top: none !important;
+}
+
+.pac-item:hover,
+.pac-item-selected {
+  background-color: color-mix(in oklab, var(--primary) 8%, var(--card)) !important;
+}
+
+.pac-item-query {
+  color: var(--foreground) !important;
+  font-size: 0.8125rem !important;
+  font-weight: 500;
+}
+
+.pac-matched {
+  color: var(--primary) !important;
+  font-weight: 600;
+}
+
+/* replace Google's map-pin icon with a small dot in primary colour */
+.pac-icon {
+  background-image: none !important;
+  width: 8px !important;
+  height: 8px !important;
+  border-radius: 50% !important;
+  background-color: var(--primary) !important;
+  margin-top: 0 !important;
+  flex-shrink: 0;
 }

@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AuthShell, SocialButtons } from "@/components/auth-shell";
+import { AuthShell, SocialButtons, AuthMethodTabs, PhoneOTPForm } from "@/components/auth-shell";
 import { toast } from "sonner";
 import { signIn } from "@/lib/auth/auth-client";
 
@@ -19,9 +19,11 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
+  const [tab, setTab] = useState<"phone" | "email">("phone");
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
   return (
     <AuthShell
       title="Welcome back"
@@ -36,45 +38,77 @@ function LoginPage() {
       }
     >
       <SocialButtons />
-      <div className="relative my-2">
-        <div className="absolute inset-0 flex items-center"><div className="w-full h-px bg-border" /></div>
-        <div className="relative flex justify-center text-xs"><span className="bg-background px-3 text-muted-foreground">or with email</span></div>
+
+      <div className="relative my-1">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full h-px bg-border" />
+        </div>
+        <div className="relative flex justify-center text-xs">
+          <span className="bg-background px-3 text-muted-foreground">or continue with</span>
+        </div>
       </div>
-      <form
-        onSubmit={async (e) => {
-          e.preventDefault();
-          setLoading(true);
-          try {
-            const result = await signIn.email({ email, password });
-            if (result.error) {
-              toast.error(result.error.message ?? "Login failed");
-              return;
+
+      <AuthMethodTabs activeTab={tab} onChange={setTab} />
+
+      {tab === "phone" ? (
+        <PhoneOTPForm />
+      ) : (
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setLoading(true);
+            try {
+              const result = await signIn.email({ email, password });
+              if (result.error) {
+                toast.error(result.error.message ?? "Login failed");
+                return;
+              }
+              toast.success("Welcome back!");
+              navigate({ to: "/dashboard" });
+            } catch {
+              toast.error("Something went wrong. Please try again.");
+            } finally {
+              setLoading(false);
             }
-            toast.success("Welcome back!");
-            navigate({ to: "/dashboard" });
-          } catch {
-            toast.error("Something went wrong. Please try again.");
-          } finally {
-            setLoading(false);
-          }
-        }}
-        className="space-y-4"
-      >
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" placeholder="you@example.com" required className="h-11" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
-            <a href="#" className="text-xs text-muted-foreground hover:text-foreground">Forgot?</a>
+          }}
+          className="space-y-4"
+        >
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              placeholder="you@example.com"
+              required
+              className="h-11"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </div>
-          <Input id="password" type="password" placeholder="••••••••" required className="h-11" value={password} onChange={(e) => setPassword(e.target.value)} />
-        </div>
-        <Button type="submit" disabled={loading} className="w-full h-11 bg-gradient-primary shadow-elegant hover:opacity-90">
-          {loading ? "Logging in..." : "Log in"}
-        </Button>
-      </form>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
+              <a href="#" className="text-xs text-muted-foreground hover:text-foreground">Forgot?</a>
+            </div>
+            <Input
+              id="password"
+              type="password"
+              placeholder="••••••••"
+              required
+              className="h-11"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          <Button
+            type="submit"
+            disabled={loading}
+            className="w-full h-11 bg-gradient-primary shadow-elegant hover:opacity-90"
+          >
+            {loading ? "Logging in..." : "Log in"}
+          </Button>
+        </form>
+      )}
     </AuthShell>
   );
 }

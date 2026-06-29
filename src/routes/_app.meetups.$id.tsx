@@ -512,7 +512,7 @@ function MeetupResults() {
                           onChange={(e) => setEditTransport(e.target.value)}
                           className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                         >
-                          {["car", "metro", "bus", "train", "taxi", "bike", "walking"].map((t) => (
+                          {["car", "metro", "bus", "train", "taxi", "bicycle", "2-wheeler", "auto", "walking"].map((t) => (
                             <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
                           ))}
                         </select>

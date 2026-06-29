@@ -1,7 +1,6 @@
 import { APIProvider, Map, AdvancedMarker, useMap, useMapsLibrary } from "@vis.gl/react-google-maps";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "@tanstack/react-router";
-import { MapPin, Navigation, Search, X, Loader2, LocateFixed, Utensils } from "lucide-react";
+import { MapPin, Navigation, Search, X, Loader2, LocateFixed } from "lucide-react";
 
 const INDIA_CENTER = { lat: 20.5937, lng: 78.9629 };
 const INDIA_ZOOM = 5;
@@ -25,8 +24,9 @@ export type ParticipantPin = {
   meetupName: string;
 };
 
+export type SearchedPlace = { lat: number; lng: number; name: string };
+
 type Coords = { lat: number; lng: number };
-type SearchedPlace = Coords & { name: string };
 
 function isWithinIndia({ lat, lng }: Coords) {
   return (
@@ -37,47 +37,33 @@ function isWithinIndia({ lat, lng }: Coords) {
   );
 }
 
-/** Detects the user's location, recenters the map, and reports it upward. */
 function GeolocateUser({ onLocate, hasPins }: { onLocate: (c: Coords) => void; hasPins: boolean }) {
   const map = useMap();
-
   useEffect(() => {
     if (!map || !navigator.geolocation) return;
-
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const coords = { lat: position.coords.latitude, lng: position.coords.longitude };
         if (!isWithinIndia(coords)) return;
         onLocate(coords);
-        // Only recenter on the user when there aren't pins driving the view.
-        if (!hasPins) {
-          map.panTo(coords);
-          map.setZoom(LOCAL_ZOOM);
-        }
+        if (!hasPins) { map.panTo(coords); map.setZoom(LOCAL_ZOOM); }
       },
       () => {},
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [map]);
-
   return null;
 }
 
-/** Fits the map to show all participant pins (and the user when present). */
 function FitToPins({ participants, user }: { participants: ParticipantPin[]; user: Coords | null }) {
   const map = useMap();
-
   useEffect(() => {
     if (!map) return;
     const pts: Coords[] = [...participants.map((p) => ({ lat: p.lat, lng: p.lng }))];
     if (user) pts.push(user);
     if (pts.length === 0) return;
-    if (pts.length === 1) {
-      map.panTo(pts[0]);
-      map.setZoom(LOCAL_ZOOM);
-      return;
-    }
+    if (pts.length === 1) { map.panTo(pts[0]); map.setZoom(LOCAL_ZOOM); return; }
     const lats = pts.map((p) => p.lat);
     const lngs = pts.map((p) => p.lng);
     map.fitBounds(
@@ -85,22 +71,16 @@ function FitToPins({ participants, user }: { participants: ParticipantPin[]; use
       80,
     );
   }, [map, participants, user]);
-
   return null;
 }
 
-/** "Jump to my location" button — pans/zooms to the user, re-requesting if needed. */
 function LocateButton({ user, onLocate }: { user: Coords | null; onLocate: (c: Coords) => void }) {
   const map = useMap();
   const [busy, setBusy] = useState(false);
 
   const goToMe = () => {
     if (!map) return;
-    if (user) {
-      map.panTo(user);
-      map.setZoom(LOCAL_ZOOM);
-      return;
-    }
+    if (user) { map.panTo(user); map.setZoom(LOCAL_ZOOM); return; }
     if (!navigator.geolocation) return;
     setBusy(true);
     navigator.geolocation.getCurrentPosition(
@@ -122,14 +102,13 @@ function LocateButton({ user, onLocate }: { user: Coords | null; onLocate: (c: C
       type="button"
       onClick={goToMe}
       title="Go to my location"
-      className="absolute bottom-6 right-3 z-10 h-11 w-11 grid place-items-center rounded-full bg-white text-gray-700 shadow-lg ring-1 ring-black/5 hover:bg-gray-50 hover:text-primary transition-colors"
+      className="absolute bottom-4 right-3 z-10 h-11 w-11 grid place-items-center rounded-full bg-white/95 backdrop-blur text-primary shadow-lg ring-1 ring-primary/25 hover:bg-primary hover:text-primary-foreground transition-colors"
     >
       {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <LocateFixed className="h-5 w-5" />}
     </button>
   );
 }
 
-/** Search box (Places Autocomplete) to jump the map to any area. */
 function SearchBox({ onPick }: { onPick: (p: SearchedPlace) => void }) {
   const map = useMap();
   const placesLib = useMapsLibrary("places");
@@ -140,9 +119,9 @@ function SearchBox({ onPick }: { onPick: (p: SearchedPlace) => void }) {
   useEffect(() => {
     if (!placesLib || !inputRef.current || acRef.current) return;
 
+    // No country restriction — allow searching anywhere
     const ac = new placesLib.Autocomplete(inputRef.current, {
       fields: ["formatted_address", "name", "geometry"],
-      componentRestrictions: { country: "in" },
     });
 
     ac.addListener("place_changed", () => {
@@ -175,31 +154,40 @@ function SearchBox({ onPick }: { onPick: (p: SearchedPlace) => void }) {
 
   return (
     <div className="absolute top-3 left-3 right-3 z-10 sm:right-auto sm:w-80">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-        <input
-          ref={inputRef}
-          type="text"
-          placeholder="Search any area or place…"
-          onChange={(e) => setHasValue(e.target.value.length > 0)}
-          className="w-full h-11 pl-9 pr-9 rounded-full bg-white text-sm text-gray-800 shadow-lg ring-1 ring-black/5 outline-none focus:ring-2 focus:ring-primary/40 placeholder:text-gray-400"
-        />
-        {hasValue && (
-          <button
-            type="button"
-            onClick={clear}
-            title="Clear"
-            className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 grid place-items-center rounded-full text-gray-400 hover:text-gray-700"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
+      {/* 1.5px orange gradient border using bg-gradient-primary (always orange, light + dark) */}
+      <div className="p-[1.5px] rounded-full shadow-lg overflow-hidden" style={{ background: "linear-gradient(135deg, oklch(0.672 0.131 39) 0%, oklch(0.73 0.118 42) 100%)" }}>
+        <div className="relative rounded-full overflow-hidden bg-white dark:bg-gray-900">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 pointer-events-none z-10" style={{ color: "oklch(0.672 0.131 39)" }} />
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder="Search any area or place…"
+            onChange={(e) => setHasValue(e.target.value.length > 0)}
+            className="w-full h-11 pl-10 pr-9 bg-transparent text-sm text-gray-800 dark:text-gray-100 outline-none placeholder:text-gray-400 dark:placeholder:text-gray-500"
+          />
+          {hasValue && (
+            <button
+              type="button"
+              onClick={clear}
+              title="Clear"
+              className="absolute right-3 top-1/2 -translate-y-1/2 h-5 w-5 grid place-items-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors z-10"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-export default function TestMap({ participants = [] }: { participants?: ParticipantPin[] }) {
+export default function TestMap({
+  participants = [],
+  onSearch,
+}: {
+  participants?: ParticipantPin[];
+  onSearch?: (place: SearchedPlace | null) => void;
+}) {
   const [user, setUser] = useState<Coords | null>(null);
   const [searched, setSearched] = useState<SearchedPlace | null>(null);
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
@@ -213,6 +201,11 @@ export default function TestMap({ participants = [] }: { participants?: Particip
   }
 
   const hasPins = participants.length > 0;
+
+  const handlePick = (place: SearchedPlace) => {
+    setSearched(place);
+    onSearch?.(place);
+  };
 
   return (
     <APIProvider apiKey={apiKey} libraries={["places"]}>
@@ -228,22 +221,10 @@ export default function TestMap({ participants = [] }: { participants?: Particip
         >
           <GeolocateUser onLocate={setUser} hasPins={hasPins} />
           <FitToPins participants={participants} user={user} />
-          <SearchBox onPick={setSearched} />
+          <SearchBox onPick={handlePick} />
           <LocateButton user={user} onLocate={setUser} />
 
-          {/* Show top-rated places around the searched location */}
-          {searched && (
-            <Link
-              to="/venues"
-              search={{ area: searched.name, lat: searched.lat, lng: searched.lng, radius: 4500 }}
-              className="absolute bottom-6 left-3 z-10 inline-flex items-center gap-2 rounded-full bg-foreground text-background text-sm font-medium pl-4 pr-5 h-11 shadow-lg hover:bg-foreground/90 transition-colors max-w-[calc(100%-5rem)]"
-            >
-              <Utensils className="h-4 w-4 shrink-0" />
-              <span className="truncate">See places near {searched.name}</span>
-            </Link>
-          )}
-
-          {/* User's own location */}
+          {/* User pin */}
           {user && (
             <AdvancedMarker position={user} title="You are here">
               <div className="flex flex-col items-center">
@@ -257,11 +238,11 @@ export default function TestMap({ participants = [] }: { participants?: Particip
             </AdvancedMarker>
           )}
 
-          {/* Searched location */}
+          {/* Searched location pin */}
           {searched && (
             <AdvancedMarker position={{ lat: searched.lat, lng: searched.lng }} title={searched.name}>
               <div className="flex flex-col items-center">
-                <div className="h-10 w-10 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-lg ring-4 ring-white">
+                <div className="h-10 w-10 rounded-full text-white flex items-center justify-center shadow-lg ring-4 ring-white" style={{ background: "oklch(0.672 0.131 39)" }}>
                   <Search className="h-5 w-5" />
                 </div>
                 <div className="mt-1.5 bg-gray-900/85 backdrop-blur text-white text-xs font-semibold px-2.5 py-1 rounded-full whitespace-nowrap shadow max-w-[200px] truncate">
@@ -271,7 +252,7 @@ export default function TestMap({ participants = [] }: { participants?: Particip
             </AdvancedMarker>
           )}
 
-          {/* Participant pins across the user's meetups */}
+          {/* Participant pins */}
           {participants.map((p, i) => (
             <AdvancedMarker key={p.id} position={{ lat: p.lat, lng: p.lng }} title={`${p.name} · ${p.meetupName}`}>
               <div className="group relative flex flex-col items-center">

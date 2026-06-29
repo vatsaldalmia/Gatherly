@@ -3,7 +3,9 @@ import { meetups as seedMeetups } from "./dummy-data";
 
 export type TransportMode =
   | "walking"
-  | "bike"
+  | "bicycle"
+  | "2-wheeler"
+  | "auto"
   | "car"
   | "taxi"
   | "metro"
@@ -89,7 +91,7 @@ function ensureSeeded() {
       id: `seed-${m.id}-${i}`,
       name: mm.name,
       address: mm.location,
-      transport: (["car", "metro", "bike", "walking"] as TransportMode[])[i % 4],
+      transport: (["car", "metro", "bicycle", "walking"] as TransportMode[])[i % 4],
       joinedAt: Date.now() - i * 60000,
       avatar: mm.avatar,
     })),
@@ -210,7 +212,9 @@ export function useMeetupsList() {
 
 export const TRANSPORT_OPTIONS: { id: TransportMode; label: string }[] = [
   { id: "walking", label: "Walking" },
-  { id: "bike", label: "Bike" },
+  { id: "bicycle", label: "Bicycle" },
+  { id: "2-wheeler", label: "2-Wheeler" },
+  { id: "auto", label: "Auto" },
   { id: "car", label: "Car" },
   { id: "taxi", label: "Taxi" },
   { id: "metro", label: "Metro" },

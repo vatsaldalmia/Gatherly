@@ -30,7 +30,16 @@ export const calculateAreas = createServerFn({ method: "POST" })
       throw new Error(`Need at least 2 participants with valid addresses. Please fix: ${names}`);
     }
 
-    const computed = await runFairnessEngine(meetup.participants);
+    // Build a departure Date from the meetup's scheduled date + time.
+    // Used to pull traffic-aware travel times from Google Distance Matrix.
+    let meetupAt: Date | undefined;
+    if (meetup.date) {
+      const iso = meetup.time ? `${meetup.date}T${meetup.time}:00` : `${meetup.date}T12:00:00`;
+      const parsed = new Date(iso);
+      if (!isNaN(parsed.getTime())) meetupAt = parsed;
+    }
+
+    const computed = await runFairnessEngine(meetup.participants, meetupAt);
 
     // Replace existing areas for this meetup
     await db.delete(areas).where(eq(areas.meetupId, data.meetupId));

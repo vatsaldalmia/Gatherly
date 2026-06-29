@@ -87,7 +87,7 @@ export const participants = sqliteTable("participant", {
   lat: real("lat"),
   lng: real("lng"),
   transport: text("transport", {
-    enum: ["walking", "bike", "car", "taxi", "metro", "train", "bus"],
+    enum: ["walking", "bicycle", "bike", "2-wheeler", "motorbike", "auto", "car", "taxi", "metro", "train", "bus"],
   })
     .notNull()
     .default("car"),
