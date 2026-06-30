@@ -23,15 +23,19 @@ function AutocompleteInner({ id, value, onChange, onSelect, placeholder, classNa
     if (!placesLib || !inputRef.current || acRef.current) return;
 
     const ac = new placesLib.Autocomplete(inputRef.current, {
-      fields: ["formatted_address", "place_id", "geometry"],
+      fields: ["formatted_address", "place_id", "geometry", "name"],
     });
 
     ac.addListener("place_changed", () => {
       const place = ac.getPlace();
-      const addr = place.formatted_address ?? inputRef.current?.value ?? "";
       const placeId = place.place_id ?? "";
-      onChange(addr);
-      onSelect(addr, placeId);
+
+      // Use place.name as the display label (e.g. "Feb 30 Orchid") — recognisable to other participants.
+      // Geocoding uses the placeId directly so accuracy isn't affected.
+      const label = place.name || place.formatted_address || inputRef.current?.value || "";
+
+      onChange(label);
+      onSelect(label, placeId);
     });
 
     acRef.current = ac;

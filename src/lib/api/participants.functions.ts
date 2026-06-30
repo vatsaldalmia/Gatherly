@@ -3,7 +3,7 @@ import { z } from "zod";
 import { eq, count } from "drizzle-orm";
 import { getDb } from "../db/index.server";
 import { participants, meetups, areas as areasTable } from "../db/schema";
-import { geocodeAddress } from "../maps/geocoding.server";
+import { geocodeAddress, geocodeByPlaceId } from "../maps/geocoding.server";
 import { runFairnessEngine } from "../fairness/engine.server";
 
 const TransportEnum = z.enum(["walking", "bicycle", "2-wheeler", "auto", "car", "taxi", "metro", "train", "bus"]);
@@ -13,6 +13,7 @@ const AddParticipantInput = z.object({
   name: z.string().min(1).max(80),
   address: z.string().min(1),
   transport: TransportEnum,
+  placeId: z.string().optional(),
   // Browser geolocation coords — skip geocoding round-trip when provided
   lat: z.number().optional(),
   lng: z.number().optional(),
@@ -31,7 +32,9 @@ export const addParticipant = createServerFn({ method: "POST" })
     let lat = data.lat;
     let lng = data.lng;
     if (lat == null || lng == null) {
-      const geocoded = await geocodeAddress(data.address);
+      const geocoded = data.placeId
+        ? await geocodeByPlaceId(data.placeId)
+        : await geocodeAddress(data.address);
       lat = geocoded?.lat;
       lng = geocoded?.lng;
     }
@@ -123,6 +126,7 @@ export const updateParticipant = createServerFn({ method: "POST" })
       meetupId: z.string(),
       address: z.string().min(1),
       transport: TransportEnum,
+      placeId: z.string().optional(),
       lat: z.number().optional(),
       lng: z.number().optional(),
     }),
@@ -132,7 +136,9 @@ export const updateParticipant = createServerFn({ method: "POST" })
     let lat = data.lat;
     let lng = data.lng;
     if (lat == null || lng == null) {
-      const geocoded = await geocodeAddress(data.address);
+      const geocoded = data.placeId
+        ? await geocodeByPlaceId(data.placeId)
+        : await geocodeAddress(data.address);
       lat = geocoded?.lat;
       lng = geocoded?.lng;
     }

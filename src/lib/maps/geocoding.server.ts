@@ -16,6 +16,20 @@ export async function geocodeAddress(address: string): Promise<GeocodeResult> {
   return json.results[0].geometry.location;
 }
 
+export async function geocodeByPlaceId(placeId: string): Promise<GeocodeResult> {
+  const key = process.env.GOOGLE_MAPS_API_KEY;
+  if (!key) throw new Error("GOOGLE_MAPS_API_KEY is not set");
+
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?place_id=${encodeURIComponent(placeId)}&key=${key}`;
+  const res = await fetch(url);
+  const json = (await res.json()) as {
+    status: string;
+    results: Array<{ geometry: { location: { lat: number; lng: number } } }>;
+  };
+  if (json.status !== "OK" || json.results.length === 0) return null;
+  return json.results[0].geometry.location;
+}
+
 export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
   const key = process.env.GOOGLE_MAPS_API_KEY;
   if (!key) throw new Error("GOOGLE_MAPS_API_KEY is not set");
