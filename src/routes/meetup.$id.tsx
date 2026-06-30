@@ -54,6 +54,7 @@ function JoinMeetup() {
   const addParticipantMutation = useAddParticipant();
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
+  const [placeId, setPlaceId] = useState<string | undefined>();
   const [transport, setTransport] = useState<TransportMode>("car");
   const [locating, setLocating] = useState(false);
   const [joined, setJoined] = useState<string | null>(null);
@@ -127,6 +128,7 @@ function JoinMeetup() {
         name: name.trim(),
         address: address.trim(),
         transport,
+        placeId,
       });
       setMyParticipantId(meetup.id, result.id);
       setJoined(result.id);
@@ -258,8 +260,8 @@ function JoinMeetup() {
             <AddressAutocomplete
               id="address"
               value={address}
-              onChange={setAddress}
-              onSelect={(desc) => setAddress(desc)}
+              onChange={(v) => { setAddress(v); setPlaceId(undefined); }}
+              onSelect={(desc, pid) => { setAddress(desc); setPlaceId(pid || undefined); }}
               placeholder="Neighbourhood or address"
               required
             />
