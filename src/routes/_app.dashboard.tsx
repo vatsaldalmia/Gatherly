@@ -318,7 +318,7 @@ function DashboardMap() {
           <Button asChild size="sm" className="shrink-0">
             <Link
               to="/venues"
-              search={{ area: searched.name, lat: searched.lat, lng: searched.lng, radius: 4500 }}
+              search={{ area: searched.name, lat: searched.lat, lng: searched.lng, radius: 4500, myLat: undefined, myLng: undefined, myMode: undefined }}
             >
               <Utensils className="h-3.5 w-3.5 mr-1.5" />
               See venues
