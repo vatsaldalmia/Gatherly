@@ -1,9 +1,9 @@
 import { createFileRoute, useSearch, useRouter } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { AppTopbar } from "@/components/app-topbar";
 import { Button } from "@/components/ui/button";
-import { getNearbyPlaces, type NearbyPlace } from "@/lib/api/places.functions";
+import { getNearbyPlaces, getTravelDistances, type NearbyPlace } from "@/lib/api/places.functions";
 import { MapPin, Star, Loader2, Navigation, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +14,10 @@ export const Route = createFileRoute("/_app/venues")({
     lat: s.lat != null && !Number.isNaN(Number(s.lat)) ? Number(s.lat) : undefined,
     lng: s.lng != null && !Number.isNaN(Number(s.lng)) ? Number(s.lng) : undefined,
     radius: s.radius != null && !Number.isNaN(Number(s.radius)) ? Number(s.radius) : undefined,
+    // The viewing user's own coordinates + transport — enables real "X km from you" per venue.
+    myLat: s.myLat != null && !Number.isNaN(Number(s.myLat)) ? Number(s.myLat) : undefined,
+    myLng: s.myLng != null && !Number.isNaN(Number(s.myLng)) ? Number(s.myLng) : undefined,
+    myMode: typeof s.myMode === "string" ? s.myMode : undefined,
   }),
   component: VenuesPage,
 });
@@ -32,13 +36,39 @@ function priceStr(level: number | null) {
   return "₹".repeat(Math.min(4, Math.max(1, level)));
 }
 
+// Straight-line distance (km) — fallback only, used when Google road distance
+// isn't available (no API key or route not found).
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(x));
+}
+
+function kmLabel(km: number) {
+  return km < 1 ? `${Math.round(km * 1000)} m from you` : `${km.toFixed(1)} km from you`;
+}
+
+function minLabel(seconds: number) {
+  const mins = Math.round(seconds / 60);
+  if (mins < 60) return `${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
+}
+
 type Coords = { lat: number; lng: number };
 type NamedCoords = Coords & { name: string };
 
 function VenuesPage() {
-  const { area, lat, lng, radius } = useSearch({ from: "/_app/venues" });
+  const { area, lat, lng, radius, myLat, myLng, myMode } = useSearch({ from: "/_app/venues" });
   const router = useRouter();
   const [cat, setCat] = useState("restaurant");
+
+  const myCoords: Coords | null = myLat != null && myLng != null ? { lat: myLat, lng: myLng } : null;
 
   const fromDashboard = lat != null && lng != null;
   const urlCoords: NamedCoords | null = fromDashboard
@@ -106,6 +136,30 @@ function VenuesPage() {
   const places = (data?.pages.flatMap((p) => p.places) ?? []).sort(
     (a, b) => weightedScore(b.rating, b.userRatingsTotal) - weightedScore(a.rating, a.userRatingsTotal),
   );
+
+  // Real road distance/time from the viewing user to each loaded venue, via
+  // Google Distance Matrix. Keyed by placeId so it survives re-sorts and paging.
+  const placeIdsKey = places.map((p) => p.placeId).join(",");
+  const { data: travelByPlaceId } = useQuery({
+    queryKey: ["venue-travel", myLat, myLng, myMode, placeIdsKey],
+    enabled: !!myCoords && places.length > 0,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const res = await getTravelDistances({
+        data: {
+          origin: { lat: myCoords!.lat, lng: myCoords!.lng },
+          mode: myMode ?? "driving",
+          destinations: places.map((p) => ({ lat: p.lat, lng: p.lng })),
+        },
+      });
+      const map: Record<string, { meters: number; seconds: number }> = {};
+      places.forEach((p, i) => {
+        const r = res[i];
+        if (r) map[p.placeId] = r;
+      });
+      return map;
+    },
+  });
 
   const sentinelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -227,9 +281,19 @@ function VenuesPage() {
         {/* Results grid + infinite scroll */}
         {coords && !isLoading && places.length > 0 && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {places.map((v) => (
-              <VenueCard key={v.placeId} v={v} />
-            ))}
+            {places.map((v) => {
+              const travel = travelByPlaceId?.[v.placeId];
+              return (
+                <VenueCard
+                  key={v.placeId}
+                  v={v}
+                  // Prefer real road distance/time; fall back to straight-line km.
+                  roadMeters={travel?.meters ?? null}
+                  roadSeconds={travel?.seconds ?? null}
+                  fallbackKm={myCoords ? haversineKm(myCoords, { lat: v.lat, lng: v.lng }) : null}
+                />
+              );
+            })}
             <div ref={sentinelRef} className="col-span-full">
               {isFetchingNextPage && (
                 <div className="py-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -250,7 +314,24 @@ function VenuesPage() {
   );
 }
 
-function VenueCard({ v }: { v: NearbyPlace }) {
+function VenueCard({
+  v,
+  roadMeters,
+  roadSeconds,
+  fallbackKm,
+}: {
+  v: NearbyPlace;
+  roadMeters: number | null;
+  roadSeconds: number | null;
+  fallbackKm: number | null;
+}) {
+  // Prefer Google road distance; fall back to straight-line if unavailable.
+  const distanceText =
+    roadMeters != null
+      ? kmLabel(roadMeters / 1000)
+      : fallbackKm != null
+        ? kmLabel(fallbackKm)
+        : null;
   return (
     <a
       href={v.mapsUrl}
@@ -272,6 +353,12 @@ function VenueCard({ v }: { v: NearbyPlace }) {
             v.openNow ? "bg-emerald-500/90 text-white" : "bg-black/50 text-white/80",
           )}>
             {v.openNow ? "Open" : "Closed"}
+          </span>
+        )}
+        {distanceText != null && (
+          <span className="absolute bottom-2 left-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white backdrop-blur-sm flex items-center gap-1">
+            <Navigation className="h-2.5 w-2.5" />
+            <span>{distanceText}{roadSeconds != null ? ` · ${minLabel(roadSeconds)}` : ""}</span>
           </span>
         )}
       </div>
