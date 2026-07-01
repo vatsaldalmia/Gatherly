@@ -11,6 +11,7 @@ import {
   Clock,
   Loader2,
   MapPin,
+  Navigation,
   Route as RouteIcon,
   Share2,
   Vote,
@@ -26,8 +27,10 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { getMyParticipantId, type MeetupStatus } from "@/lib/meetup-store";
+import { getTravelDistances } from "@/lib/api/places.functions";
 import { useMeetupQuery, useCastVote, useRemoveVote, useCalculateAreas, useFinalizeMeetup, useDeleteMeetup, useMeetupsListQuery, useUpdateParticipant } from "@/lib/api/hooks";
 import { useSession } from "@/lib/auth/auth-client";
 import { ShareMeetupDialog } from "@/components/share-meetup-dialog";
@@ -139,14 +142,45 @@ function MeetupResults() {
     [meetup?.participants],
   );
 
-  // The viewing user's own participant coords — passed to the venues page so
-  // each venue can show "X km from you" instead of only the group average.
-  const myCoords = useMemo(() => {
-    const me = (meetup?.participants ?? []).find(
-      (p) => p.id === myId || (!!session?.user && p.userId === session.user.id),
-    );
-    return me?.lat != null && me?.lng != null ? { lat: me.lat, lng: me.lng } : null;
-  }, [meetup?.participants, myId, session?.user]);
+  // The viewing user's own participant coords + transport — passed to the venues
+  // page so each venue can show real "X km from you" (road distance) via their mode.
+  const me = useMemo(
+    () =>
+      (meetup?.participants ?? []).find(
+        (p) => p.id === myId || (!!session?.user && p.userId === session.user.id),
+      ),
+    [meetup?.participants, myId, session?.user],
+  );
+  const myCoords = useMemo(
+    () => (me?.lat != null && me?.lng != null ? { lat: me.lat, lng: me.lng } : null),
+    [me],
+  );
+  const myMode = me?.transport;
+
+  // Real road distance/time from the viewing user to each recommended area, via
+  // Google Distance Matrix — keyed by area id. Falls back to null (then straight
+  // line) when unavailable.
+  const areaIdsKey = ranked.map((a) => a.id).join(",");
+  const { data: areaTravel } = useQuery({
+    queryKey: ["area-travel", myCoords?.lat, myCoords?.lng, myMode, areaIdsKey],
+    enabled: !!myCoords && ranked.length > 0,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const res = await getTravelDistances({
+        data: {
+          origin: { lat: myCoords!.lat, lng: myCoords!.lng },
+          mode: myMode ?? "driving",
+          destinations: ranked.map((a) => ({ lat: a.lat, lng: a.lng })),
+        },
+      });
+      const map: Record<string, { meters: number; seconds: number }> = {};
+      ranked.forEach((a, i) => {
+        const r = res[i];
+        if (r) map[a.id] = r;
+      });
+      return map;
+    },
+  });
 
   // Close-knit group: the engine returns a single "central area" when everyone
   // is within 5 km, instead of a grid of fair-midpoint candidates. A spread-out
@@ -439,13 +473,28 @@ function MeetupResults() {
                           <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {a.avgTravelTimeMin} min avg</span>
                             <span className="flex items-center gap-1"><RouteIcon className="h-3 w-3" /> {a.avgDistanceKm} km avg</span>
+                            {myCoords && (
+                              <span className="flex items-center gap-1 text-primary font-medium">
+                                <Navigation className="h-3 w-3" />
+                                {(() => {
+                                  const road = areaTravel?.[a.id];
+                                  const km = road
+                                    ? road.meters / 1000
+                                    : haversineMeters(myCoords, { lat: a.lat, lng: a.lng }) / 1000;
+                                  const distStr = km < 1 ? `${Math.round(km * 1000)} m from you` : `${km.toFixed(1)} km from you`;
+                                  return road
+                                    ? `${distStr} · ${Math.round(road.seconds / 60)} min`
+                                    : distStr;
+                                })()}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="flex flex-col gap-2">
                           <Button size="sm" variant="outline" asChild>
                             <Link
                               to="/venues"
-                              search={{ area: a.name, lat: a.lat, lng: a.lng, radius: coverageRadius(a, participantCoords), myLat: myCoords?.lat, myLng: myCoords?.lng }}
+                              search={{ area: a.name, lat: a.lat, lng: a.lng, radius: coverageRadius(a, participantCoords), myLat: myCoords?.lat, myLng: myCoords?.lng, myMode }}
                             >
                               View venues
                             </Link>
@@ -640,12 +689,12 @@ function MeetupResults() {
               {bestArea ? (
                 <Link
                   to="/venues"
-                  search={{ area: bestArea.name, lat: bestArea.lat, lng: bestArea.lng, radius: coverageRadius(bestArea, participantCoords), myLat: myCoords?.lat, myLng: myCoords?.lng }}
+                  search={{ area: bestArea.name, lat: bestArea.lat, lng: bestArea.lng, radius: coverageRadius(bestArea, participantCoords), myLat: myCoords?.lat, myLng: myCoords?.lng, myMode }}
                 >
                   <MapPin className="h-4 w-4 mr-2" /> Browse venues near {bestArea.name}
                 </Link>
               ) : (
-                <Link to="/venues" search={{ area: undefined, lat: undefined, lng: undefined, radius: undefined, myLat: myCoords?.lat, myLng: myCoords?.lng }}>
+                <Link to="/venues" search={{ area: undefined, lat: undefined, lng: undefined, radius: undefined, myLat: myCoords?.lat, myLng: myCoords?.lng, myMode }}>
                   <MapPin className="h-4 w-4 mr-2" /> Browse venues
                 </Link>
               )}

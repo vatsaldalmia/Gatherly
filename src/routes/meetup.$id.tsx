@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useParams } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { ComponentType, SVGProps } from "react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -30,17 +31,18 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { AutoRickshaw } from "@/components/icons/auto-rickshaw";
 
 export const Route = createFileRoute("/meetup/$id")({
   head: () => ({ meta: [{ title: "Join meetup — Gatherly" }] }),
   component: JoinMeetup,
 });
 
-const transportIcons: Record<TransportMode, typeof Footprints> = {
+const transportIcons: Record<TransportMode, ComponentType<SVGProps<SVGSVGElement>>> = {
   walking: Footprints,
   bicycle: Bike,
   "2-wheeler": Bike,
-  auto: CarTaxiFront,
+  auto: AutoRickshaw,
   car: Car,
   taxi: CarTaxiFront,
   metro: TrainFront,
@@ -63,6 +65,20 @@ function JoinMeetup() {
     if (!id) return;
     setJoined(getMyParticipantId(id));
   }, [id]);
+
+  // Order transport options by how many people already in this meetup picked each
+  // mode — most-used first — so joiners see the group's common choices up top.
+  // Modes nobody picked keep their default order after the used ones.
+  const orderedTransport = useMemo(() => {
+    const counts = new Map<TransportMode, number>();
+    for (const p of meetup?.participants ?? []) {
+      const t = p.transport as TransportMode;
+      counts.set(t, (counts.get(t) ?? 0) + 1);
+    }
+    return TRANSPORT_OPTIONS.map((opt, i) => ({ opt, i, count: counts.get(opt.id) ?? 0 }))
+      .sort((a, b) => b.count - a.count || a.i - b.i)
+      .map((x) => x.opt);
+  }, [meetup?.participants]);
 
   if (isLoading) {
     return (
@@ -271,7 +287,7 @@ function JoinMeetup() {
           <div className="space-y-2">
             <Label>How will you get there?</Label>
             <div className="grid grid-cols-4 gap-2">
-              {TRANSPORT_OPTIONS.map((t) => {
+              {orderedTransport.map((t) => {
                 const Icon = transportIcons[t.id];
                 const active = transport === t.id;
                 return (

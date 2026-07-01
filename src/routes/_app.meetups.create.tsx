@@ -36,6 +36,8 @@ import { useCreateMeetup, useAddParticipant } from "@/lib/api/hooks";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { useSession } from "@/lib/auth/auth-client";
 import { setMyParticipantId, type TransportMode } from "@/lib/meetup-store";
+import { AutoRickshaw } from "@/components/icons/auto-rickshaw";
+import type { ComponentType, SVGProps } from "react";
 
 export const Route = createFileRoute("/_app/meetups/create")({
   head: () => ({ meta: [{ title: "Create meetup — Gatherly" }] }),
@@ -53,11 +55,11 @@ const types = [
   { id: "custom", label: "Custom", icon: Sparkles },
 ];
 
-const transportOptions: { id: TransportMode; label: string; icon: typeof Car }[] = [
+const transportOptions: { id: TransportMode; label: string; icon: ComponentType<SVGProps<SVGSVGElement>> }[] = [
   { id: "car", label: "Car", icon: Car },
   { id: "bicycle", label: "Bicycle", icon: Bike },
   { id: "2-wheeler", label: "2-Wheeler", icon: Bike },
-  { id: "auto", label: "Auto", icon: CarTaxiFront },
+  { id: "auto", label: "Auto", icon: AutoRickshaw },
   { id: "metro", label: "Metro", icon: TrainFront },
   { id: "train", label: "Train", icon: Train },
   { id: "bus", label: "Bus", icon: Bus },
