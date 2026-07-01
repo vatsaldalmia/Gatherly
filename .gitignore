@@ -46,3 +46,6 @@ dist-ssr
 
 # Drizzle generated migrations
 drizzle/
+
+# Lovable scaffolding metadata (not used at runtime)
+.lovable/
