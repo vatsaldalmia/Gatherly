@@ -139,6 +139,15 @@ function MeetupResults() {
     [meetup?.participants],
   );
 
+  // The viewing user's own participant coords — passed to the venues page so
+  // each venue can show "X km from you" instead of only the group average.
+  const myCoords = useMemo(() => {
+    const me = (meetup?.participants ?? []).find(
+      (p) => p.id === myId || (!!session?.user && p.userId === session.user.id),
+    );
+    return me?.lat != null && me?.lng != null ? { lat: me.lat, lng: me.lng } : null;
+  }, [meetup?.participants, myId, session?.user]);
+
   // Close-knit group: the engine returns a single "central area" when everyone
   // is within 5 km, instead of a grid of fair-midpoint candidates. A spread-out
   // group always yields multiple ranked areas, so count is a reliable signal.
@@ -436,7 +445,7 @@ function MeetupResults() {
                           <Button size="sm" variant="outline" asChild>
                             <Link
                               to="/venues"
-                              search={{ area: a.name, lat: a.lat, lng: a.lng, radius: coverageRadius(a, participantCoords) }}
+                              search={{ area: a.name, lat: a.lat, lng: a.lng, radius: coverageRadius(a, participantCoords), myLat: myCoords?.lat, myLng: myCoords?.lng }}
                             >
                               View venues
                             </Link>
@@ -631,12 +640,12 @@ function MeetupResults() {
               {bestArea ? (
                 <Link
                   to="/venues"
-                  search={{ area: bestArea.name, lat: bestArea.lat, lng: bestArea.lng, radius: coverageRadius(bestArea, participantCoords) }}
+                  search={{ area: bestArea.name, lat: bestArea.lat, lng: bestArea.lng, radius: coverageRadius(bestArea, participantCoords), myLat: myCoords?.lat, myLng: myCoords?.lng }}
                 >
                   <MapPin className="h-4 w-4 mr-2" /> Browse venues near {bestArea.name}
                 </Link>
               ) : (
-                <Link to="/venues" search={{ area: undefined, lat: undefined, lng: undefined, radius: undefined }}>
+                <Link to="/venues" search={{ area: undefined, lat: undefined, lng: undefined, radius: undefined, myLat: myCoords?.lat, myLng: myCoords?.lng }}>
                   <MapPin className="h-4 w-4 mr-2" /> Browse venues
                 </Link>
               )}
