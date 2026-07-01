@@ -14,6 +14,9 @@ export const Route = createFileRoute("/_app/venues")({
     lat: s.lat != null && !Number.isNaN(Number(s.lat)) ? Number(s.lat) : undefined,
     lng: s.lng != null && !Number.isNaN(Number(s.lng)) ? Number(s.lng) : undefined,
     radius: s.radius != null && !Number.isNaN(Number(s.radius)) ? Number(s.radius) : undefined,
+    // The viewing user's own coordinates — enables "X km from you" per venue.
+    myLat: s.myLat != null && !Number.isNaN(Number(s.myLat)) ? Number(s.myLat) : undefined,
+    myLng: s.myLng != null && !Number.isNaN(Number(s.myLng)) ? Number(s.myLng) : undefined,
   }),
   component: VenuesPage,
 });
@@ -32,13 +35,30 @@ function priceStr(level: number | null) {
   return "₹".repeat(Math.min(4, Math.max(1, level)));
 }
 
+// Straight-line distance (km) between two coordinates, for "X km from you".
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
+  const R = 6371;
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+  const x =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.asin(Math.sqrt(x));
+}
+
+function distanceLabel(km: number) {
+  return km < 1 ? `${Math.round(km * 1000)} m from you` : `${km.toFixed(1)} km from you`;
+}
+
 type Coords = { lat: number; lng: number };
 type NamedCoords = Coords & { name: string };
 
 function VenuesPage() {
-  const { area, lat, lng, radius } = useSearch({ from: "/_app/venues" });
+  const { area, lat, lng, radius, myLat, myLng } = useSearch({ from: "/_app/venues" });
   const router = useRouter();
   const [cat, setCat] = useState("restaurant");
+
+  const myCoords: Coords | null = myLat != null && myLng != null ? { lat: myLat, lng: myLng } : null;
 
   const fromDashboard = lat != null && lng != null;
   const urlCoords: NamedCoords | null = fromDashboard
@@ -228,7 +248,11 @@ function VenuesPage() {
         {coords && !isLoading && places.length > 0 && (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {places.map((v) => (
-              <VenueCard key={v.placeId} v={v} />
+              <VenueCard
+                key={v.placeId}
+                v={v}
+                distanceKm={myCoords ? haversineKm(myCoords, { lat: v.lat, lng: v.lng }) : null}
+              />
             ))}
             <div ref={sentinelRef} className="col-span-full">
               {isFetchingNextPage && (
@@ -250,7 +274,7 @@ function VenuesPage() {
   );
 }
 
-function VenueCard({ v }: { v: NearbyPlace }) {
+function VenueCard({ v, distanceKm }: { v: NearbyPlace; distanceKm: number | null }) {
   return (
     <a
       href={v.mapsUrl}
@@ -272,6 +296,11 @@ function VenueCard({ v }: { v: NearbyPlace }) {
             v.openNow ? "bg-emerald-500/90 text-white" : "bg-black/50 text-white/80",
           )}>
             {v.openNow ? "Open" : "Closed"}
+          </span>
+        )}
+        {distanceKm != null && (
+          <span className="absolute bottom-2 left-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white backdrop-blur-sm flex items-center gap-1">
+            <Navigation className="h-2.5 w-2.5" /> {distanceLabel(distanceKm)}
           </span>
         )}
       </div>
