@@ -31,7 +31,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { getMyParticipantId, type MeetupStatus } from "@/lib/meetup-store";
 import { getTravelDistances } from "@/lib/api/places.functions";
-import { useMeetupQuery, useCastVote, useRemoveVote, useCalculateAreas, useFinalizeMeetup, useDeleteMeetup, useMeetupsListQuery, useUpdateParticipant } from "@/lib/api/hooks";
+import { useMeetupQuery, useCastVote, useRemoveVote, useCalculateAreas, useFinalizeMeetup, useDeleteMeetup, useMeetupsListQuery, useUpdateParticipant, useParticipantJoinNotifications } from "@/lib/api/hooks";
 import { useSession } from "@/lib/auth/auth-client";
 import { ShareMeetupDialog } from "@/components/share-meetup-dialog";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
@@ -85,9 +85,13 @@ function MeetupResults() {
   const { id } = useParams({ from: "/_app/meetups/$id" });
   const search = useSearch({ from: "/_app/meetups/$id" });
   const navigate = useNavigate();
-  const { data: meetup, isLoading } = useMeetupQuery(id);
+  const { data: meetup, isLoading, isFetching } = useMeetupQuery(id);
   const { data: session } = useSession();
   const { data: myMeetups = [] } = useMeetupsListQuery();
+
+  // The host sits on this page after sharing the link, so joiners must announce themselves.
+  useParticipantJoinNotifications(meetup);
+
   const castVoteMutation = useCastVote();
   const removeVoteMutation = useRemoveVote();
   const calculateAreasMutation = useCalculateAreas();
@@ -530,6 +534,14 @@ function MeetupResults() {
                 <h3 className="font-semibold flex items-center gap-2">
                   <Users className="h-4 w-4 text-muted-foreground" />
                   Participants ({meetup.participants.length})
+                  <span
+                    aria-hidden
+                    title="Live — this list updates on its own"
+                    className={cn(
+                      "h-1.5 w-1.5 rounded-full bg-mint transition-opacity duration-500",
+                      isFetching ? "opacity-100 animate-pulse" : "opacity-30",
+                    )}
+                  />
                 </h3>
                 {meetup.expectedCount && meetup.expectedCount > meetup.participants.length && (
                   <span className="text-xs text-muted-foreground">
