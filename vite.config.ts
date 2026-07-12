@@ -12,4 +12,12 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Force Nitro on: it otherwise only auto-enables inside a Lovable sandbox, so a
+  // self-hosted `bun run build` would emit no Worker at all.
+  // Nitro regenerates .output/server/wrangler.json every build and gives us no way to
+  // declare bindings, so scripts/patch-wrangler.mjs merges the D1 binding in afterwards.
+  nitro: {
+    preset: "cloudflare-module",
+    cloudflare: { nodeCompat: true, deployConfig: true },
+  },
 });
