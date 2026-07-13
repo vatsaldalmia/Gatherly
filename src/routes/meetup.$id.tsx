@@ -13,7 +13,7 @@ import {
   TRANSPORT_OPTIONS,
   type TransportMode,
 } from "@/lib/meetup-store";
-import { useMeetupQuery, useAddParticipant } from "@/lib/api/hooks";
+import { useMeetupQuery, useAddParticipant, useParticipantJoinNotifications } from "@/lib/api/hooks";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import {
   MapPin,
@@ -54,6 +54,10 @@ function JoinMeetup() {
   const { id } = useParams({ from: "/meetup/$id" });
   const { data: meetup, isLoading } = useMeetupQuery(id);
   const addParticipantMutation = useAddParticipant();
+
+  // Someone who has joined tends to leave this page open; show them the group filling up.
+  useParticipantJoinNotifications(meetup);
+
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [placeId, setPlaceId] = useState<string | undefined>();

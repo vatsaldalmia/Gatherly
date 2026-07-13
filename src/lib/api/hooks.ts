@@ -1,4 +1,6 @@
+import { useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { listMeetups, getMeetup, createMeetup, deleteMeetup } from "./meetups.functions";
 import { addParticipant, updateParticipant } from "./participants.functions";
 import { castVote, removeVote, finalizeMeetup } from "./votes.functions";
@@ -25,8 +27,59 @@ export function useMeetupQuery(id: string | undefined) {
     queryFn: () => getMeetup({ data: { id: id! } }),
     enabled: !!id,
     staleTime: 5_000,
-    refetchInterval: 15_000, // Poll until WebSockets are added
+    // A meetup is shared by link and edited by several people at once, so the copy on
+    // screen goes stale on its own — nobody on this tab has to act for it to change.
+    // Poll until WebSockets are added, and catch up immediately when the tab regains
+    // focus or the network returns, which is when a host actually looks at the page.
+    refetchInterval: 10_000,
+    refetchIntervalInBackground: false, // a hidden tab has nobody to show updates to
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
+}
+
+type LiveParticipant = { id: string; name: string };
+
+/**
+ * Announces people who appear between polls of a meetup already on screen.
+ *
+ * The detail query refreshes itself, so joiners land in the participant list silently —
+ * the host is given no reason to look back at a list they have already read. This diffs
+ * each refetch against the participants this tab has already seen and surfaces the new
+ * ones, so sharing the link produces visible arrivals rather than a number that quietly
+ * changes when nobody is looking.
+ */
+export function useParticipantJoinNotifications(
+  meetup: { id: string; participants: LiveParticipant[] } | undefined,
+) {
+  const qc = useQueryClient();
+  // Which meetup `seen` describes; a different id means a fresh baseline, not new joins.
+  const seenFor = useRef<string | null>(null);
+  const seen = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!meetup) return;
+
+    // First sight of this meetup: everyone already there is history, not an arrival.
+    if (seenFor.current !== meetup.id) {
+      seenFor.current = meetup.id;
+      seen.current = new Set(meetup.participants.map((p) => p.id));
+      return;
+    }
+
+    const arrived = meetup.participants.filter((p) => !seen.current.has(p.id));
+    if (arrived.length === 0) return;
+    for (const p of arrived) seen.current.add(p.id);
+
+    const names = arrived.map((p) => p.name);
+    toast.success(names.length === 1 ? `${names[0]} joined` : `${names.length} people joined`, {
+      description: names.length > 1 ? names.join(", ") : "They're on the map now.",
+      icon: "👋",
+    });
+
+    // The list view shows participant counts, so it is stale the moment this fires.
+    qc.invalidateQueries({ queryKey: meetupKeys.list() });
+  }, [meetup, qc]);
 }
 
 export function useCreateMeetup() {
@@ -51,8 +104,11 @@ export function useAddParticipant() {
   return useMutation({
     mutationFn: (input: Parameters<typeof addParticipant>[0]["data"]) =>
       addParticipant({ data: input }),
-    onSuccess: (_, vars) =>
-      qc.invalidateQueries({ queryKey: meetupKeys.detail(vars.meetupId) }),
+    // Joining changes the participant count the list view renders, not just the detail.
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: meetupKeys.detail(vars.meetupId) });
+      qc.invalidateQueries({ queryKey: meetupKeys.list() });
+    },
   });
 }
 
@@ -86,20 +142,16 @@ export function useUpdateParticipant() {
 export function useCastVote() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof castVote>[0]["data"]) =>
-      castVote({ data: input }),
-    onSuccess: (_, vars) =>
-      qc.invalidateQueries({ queryKey: meetupKeys.detail(vars.meetupId) }),
+    mutationFn: (input: Parameters<typeof castVote>[0]["data"]) => castVote({ data: input }),
+    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: meetupKeys.detail(vars.meetupId) }),
   });
 }
 
 export function useRemoveVote() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: Parameters<typeof removeVote>[0]["data"]) =>
-      removeVote({ data: input }),
-    onSuccess: (_, vars) =>
-      qc.invalidateQueries({ queryKey: meetupKeys.detail(vars.meetupId) }),
+    mutationFn: (input: Parameters<typeof removeVote>[0]["data"]) => removeVote({ data: input }),
+    onSuccess: (_, vars) => qc.invalidateQueries({ queryKey: meetupKeys.detail(vars.meetupId) }),
   });
 }
 
@@ -107,8 +159,7 @@ export function useCalculateAreas() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (meetupId: string) => calculateAreas({ data: { meetupId } }),
-    onSuccess: (_, meetupId) =>
-      qc.invalidateQueries({ queryKey: meetupKeys.detail(meetupId) }),
+    onSuccess: (_, meetupId) => qc.invalidateQueries({ queryKey: meetupKeys.detail(meetupId) }),
   });
 }
 
@@ -117,7 +168,10 @@ export function useFinalizeMeetup() {
   return useMutation({
     mutationFn: (input: Parameters<typeof finalizeMeetup>[0]["data"]) =>
       finalizeMeetup({ data: input }),
-    onSuccess: (_, vars) =>
-      qc.invalidateQueries({ queryKey: meetupKeys.detail(vars.meetupId) }),
+    // Finalizing flips the status badge the list view renders.
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: meetupKeys.detail(vars.meetupId) });
+      qc.invalidateQueries({ queryKey: meetupKeys.list() });
+    },
   });
 }
