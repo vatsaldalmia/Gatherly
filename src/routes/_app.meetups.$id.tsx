@@ -347,15 +347,20 @@ function MeetupResults() {
           </div>
         </div>
 
+        {/* min-w-0 on the columns: grid items default to min-width:auto, so a single long
+            unbreakable string (the invite URL) would otherwise force the column wider than
+            the viewport and scroll the whole page sideways on a phone. */}
         <div className="grid lg:grid-cols-[1.4fr_1fr] gap-6 items-start">
-          <div className="space-y-6">
+          <div className="space-y-6 min-w-0">
             <section className="rounded-2xl border border-border bg-card shadow-card p-5 sm:p-6">
               <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div className="min-w-0">
+                <div className="min-w-0 w-full sm:w-auto sm:flex-1">
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">Share to invite</p>
-                  <p className="font-mono text-sm mt-1 truncate">{shareUrl}</p>
+                  {/* break-all, not truncate: the URL has no break opportunities, so nowrap
+                      would make it demand its full width and overflow the card on a phone. */}
+                  <p className="font-mono text-sm mt-1 break-all sm:truncate">{shareUrl}</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 shrink-0">
                   <Button variant="outline" size="sm" onClick={copyLink}>
                     <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy
                   </Button>
@@ -528,7 +533,7 @@ function MeetupResults() {
             )}
           </div>
 
-          <aside className="space-y-6 lg:sticky lg:top-20">
+          <aside className="space-y-6 min-w-0 lg:sticky lg:top-20">
             <section className="rounded-2xl border border-border bg-card shadow-card p-5">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold flex items-center gap-2">

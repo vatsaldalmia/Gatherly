@@ -15,6 +15,7 @@ import {
 } from "@/lib/meetup-store";
 import { useMeetupQuery, useAddParticipant, useParticipantJoinNotifications } from "@/lib/api/hooks";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
+import { describeCoords } from "@/lib/api/places.functions";
 import {
   MapPin,
   Loader2,
@@ -61,6 +62,10 @@ function JoinMeetup() {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [placeId, setPlaceId] = useState<string | undefined>();
+  // Exact coordinates from the browser's geolocation. When set, these are sent as-is and
+  // the server skips geocoding entirely — the address text is then only a human label.
+  // Cleared whenever the user edits the address, so we never pin someone to stale coords.
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [transport, setTransport] = useState<TransportMode>("car");
   const [locating, setLocating] = useState(false);
   const [joined, setJoined] = useState<string | null>(null);
@@ -122,11 +127,28 @@ function JoinMeetup() {
     }
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         const { latitude, longitude } = pos.coords;
-        if (!address) setAddress(`Near ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+
+        // The coordinates are the answer — keep them. Google may not be able to name this
+        // spot (it often can't, off a mapped road), but an unnamed point still puts the
+        // pin in exactly the right place, which is all the fairness engine needs.
+        setCoords({ lat: latitude, lng: longitude });
+        setPlaceId(undefined);
+        setAddress(`Near ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
         setLocating(false);
         toast.success("Location detected");
+
+        // Upgrade the placeholder to a neighbourhood name if Google knows one. Best-effort:
+        // a failure here leaves the coordinates untouched and the join still works.
+        try {
+          const { label } = await describeCoords({
+            data: { lat: latitude, lng: longitude },
+          });
+          if (label) setAddress(label);
+        } catch {
+          // Keep the lat/lng label.
+        }
       },
       () => {
         setLocating(false);
@@ -149,6 +171,11 @@ function JoinMeetup() {
         address: address.trim(),
         transport,
         placeId,
+        // Present only when "Use my location" was used and the address wasn't edited after.
+        // The server prefers these over geocoding the text, which is what makes an
+        // unnameable spot still land on the map.
+        lat: coords?.lat,
+        lng: coords?.lng,
       });
       setMyParticipantId(meetup.id, result.id);
       setJoined(result.id);
@@ -280,12 +307,19 @@ function JoinMeetup() {
             <AddressAutocomplete
               id="address"
               value={address}
-              onChange={(v) => { setAddress(v); setPlaceId(undefined); }}
-              onSelect={(desc, pid) => { setAddress(desc); setPlaceId(pid || undefined); }}
+              onChange={(v) => { setAddress(v); setPlaceId(undefined); setCoords(null); }}
+              onSelect={(desc, pid) => { setAddress(desc); setPlaceId(pid || undefined); setCoords(null); }}
               placeholder="Neighbourhood or address"
               required
             />
-            <p className="text-xs text-muted-foreground">We use this only to find a fair meetup point.</p>
+            {coords ? (
+              <p className="text-xs text-mint flex items-center gap-1">
+                <MapPin className="h-3 w-3 shrink-0" />
+                Pinned to your exact location ({coords.lat.toFixed(4)}, {coords.lng.toFixed(4)})
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">We use this only to find a fair meetup point.</p>
+            )}
           </div>
 
           <div className="space-y-2">
