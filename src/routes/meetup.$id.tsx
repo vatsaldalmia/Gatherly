@@ -4,16 +4,22 @@ import type { ComponentType, SVGProps } from "react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/user-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
+  clearMyParticipantId,
   getMyParticipantId,
   setMyParticipantId,
   TRANSPORT_OPTIONS,
   type TransportMode,
 } from "@/lib/meetup-store";
-import { useMeetupQuery, useAddParticipant, useParticipantJoinNotifications } from "@/lib/api/hooks";
+import {
+  useMeetupQuery,
+  useAddParticipant,
+  useLeaveMeetup,
+  useParticipantJoinNotifications,
+} from "@/lib/api/hooks";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { describeCoords } from "@/lib/api/places.functions";
 import {
@@ -29,6 +35,7 @@ import {
   CarTaxiFront,
   Users,
   CalendarRange,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -55,6 +62,7 @@ function JoinMeetup() {
   const { id } = useParams({ from: "/meetup/$id" });
   const { data: meetup, isLoading } = useMeetupQuery(id);
   const addParticipantMutation = useAddParticipant();
+  const leaveMutation = useLeaveMeetup();
 
   // Someone who has joined tends to leave this page open; show them the group filling up.
   useParticipantJoinNotifications(meetup);
@@ -185,6 +193,20 @@ function JoinMeetup() {
     }
   };
 
+  const leave = async () => {
+    if (!joined) return;
+    try {
+      await leaveMutation.mutateAsync({ meetupId: meetup.id, participantId: joined });
+      // Forget the participant id before dropping back to the form, so the page doesn't greet
+      // the user with "You're in!" for a row that no longer exists.
+      clearMyParticipantId(meetup.id);
+      setJoined(null);
+      toast.success("You've left this meetup.");
+    } catch {
+      toast.error("Couldn't leave the meetup. Please try again.");
+    }
+  };
+
   // Joined state
   if (joined) {
     const me = meetup.participants.find((p) => p.id === joined);
@@ -217,10 +239,14 @@ function JoinMeetup() {
                 </p>
                 <div className="flex -space-x-2">
                   {meetup.participants.slice(0, 8).map((p) => (
-                    <Avatar key={p.id} className="h-8 w-8 border-2 border-card">
-                      <AvatarImage src={p.avatar ?? undefined} />
-                      <AvatarFallback className="text-xs">{p.name[0]}</AvatarFallback>
-                    </Avatar>
+                    <UserAvatar
+                      key={p.id}
+                      className="h-8 w-8 border-2 border-card"
+                      fallbackClassName="text-xs"
+                      name={p.name}
+                      image={p.avatar}
+                      seed={p.id}
+                    />
                   ))}
                 </div>
               </div>
@@ -231,6 +257,18 @@ function JoinMeetup() {
             <Link to="/meetups/$id" params={{ id: meetup.id }} search={{ created: undefined }}>
               View meetup dashboard
             </Link>
+          </Button>
+
+          <Button
+            variant="ghost"
+            disabled={leaveMutation.isPending}
+            onClick={leave}
+            className="mt-2 w-full h-11 text-muted-foreground hover:text-destructive"
+          >
+            {leaveMutation.isPending
+              ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Leaving…</>
+              : <><LogOut className="h-4 w-4 mr-2" /> Leave meetup</>
+            }
           </Button>
         </main>
       </div>
@@ -256,10 +294,14 @@ function JoinMeetup() {
             <div className="mt-4 flex items-center justify-center gap-2">
               <div className="flex -space-x-2">
                 {meetup.participants.slice(0, 5).map((p) => (
-                  <Avatar key={p.id} className="h-7 w-7 border-2 border-background">
-                    <AvatarImage src={p.avatar ?? undefined} />
-                    <AvatarFallback className="text-[10px]">{p.name[0]}</AvatarFallback>
-                  </Avatar>
+                  <UserAvatar
+                    key={p.id}
+                    className="h-7 w-7 border-2 border-background"
+                    fallbackClassName="text-[10px]"
+                    name={p.name}
+                    image={p.avatar}
+                    seed={p.id}
+                  />
                 ))}
               </div>
               <span className="text-xs text-muted-foreground">{meetup.participants.length} already joined</span>

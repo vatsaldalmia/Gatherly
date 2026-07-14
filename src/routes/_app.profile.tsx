@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AppTopbar } from "@/components/app-topbar";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/user-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth/auth-client";
@@ -12,15 +12,6 @@ export const Route = createFileRoute("/_app/profile")({
   component: ProfilePage,
 });
 
-function initialsOf(name: string) {
-  return name
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
 function ProfilePage() {
   const { data: session } = useSession();
   const { data: meetups = [] } = useMeetupsListQuery();
@@ -29,11 +20,13 @@ function ProfilePage() {
   const name = user?.name ?? "You";
   const email = user?.email ?? "";
 
-  // Real stats derived from the user's meetups
-  const totalParticipants = meetups.reduce((s, m) => s + m.participants.length, 0);
+  // Real stats derived from the user's meetups. The list also carries meetups they only
+  // joined, so "planned" counts the ones they actually host — the rest are someone else's plan.
+  const hosted = meetups.filter((m) => !!user && m.hostUserId === user.id);
+  const totalParticipants = hosted.reduce((s, m) => s + m.participants.length, 0);
   const finalizedCount = meetups.filter((m) => m.finalizedAreaId).length;
   const stats = [
-    { label: "Meetups planned", value: meetups.length, icon: Calendar },
+    { label: "Meetups planned", value: hosted.length, icon: Calendar },
     { label: "People gathered", value: totalParticipants, icon: Users },
     { label: "Spots finalized", value: finalizedCount, icon: MapPin },
   ];
@@ -47,12 +40,14 @@ function ProfilePage() {
         <div className="rounded-2xl border border-border bg-card overflow-hidden">
           <div className="h-28 bg-gradient-hero" />
           <div className="px-6 sm:px-8 pb-6 -mt-10">
-            <Avatar className="h-20 w-20 ring-4 ring-card">
-              <AvatarImage src={user?.image ?? undefined} />
-              <AvatarFallback className="text-lg font-bold bg-gradient-primary text-primary-foreground">
-                {initialsOf(name)}
-              </AvatarFallback>
-            </Avatar>
+            <UserAvatar
+              className="h-20 w-20 ring-4 ring-card"
+              fallbackClassName="text-lg font-bold"
+              name={name}
+              email={email}
+              image={user?.image}
+              seed={user?.id}
+            />
             <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] gap-3 items-center">
               <div className="min-w-0">
                 <h2 className="text-2xl font-bold truncate">{name}</h2>

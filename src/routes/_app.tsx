@@ -3,10 +3,13 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { fetchSession } from "@/lib/auth/session.functions";
 
 export const Route = createFileRoute("/_app")({
-  beforeLoad: async () => {
+  beforeLoad: async ({ location }) => {
     const session = await fetchSession();
     if (!session) {
-      throw redirect({ to: "/login" });
+      // Carry the page they were trying to reach through the login, so signing in lands them
+      // there rather than on the dashboard. Following an invite link into a meetup used to
+      // mean logging in and then having to find your way back to it by hand.
+      throw redirect({ to: "/login", search: { redirect: location.href } });
     }
     return { session };
   },

@@ -1,15 +1,29 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, or, inArray } from "drizzle-orm";
 import { getDb } from "../db/index.server";
 import { meetups, participants, areas, votes } from "../db/schema";
 import { requireAuth } from "../auth/auth-middleware.server";
 
+/**
+ * Every meetup the signed-in user is part of — the ones they host *and* the ones they joined
+ * from someone else's invite link. Hosting used to be the only way a meetup could show up
+ * here, so joining a friend's plan left you with nothing to come back to: the invite link was
+ * the only way to reach it again.
+ *
+ * Callers must not read "it's in this list" as "I host it" — check `hostUserId` for that.
+ */
 export const listMeetups = createServerFn({ method: "GET" }).handler(async () => {
   const session = await requireAuth();
   const db = getDb();
+
+  const joined = db
+    .select({ id: participants.meetupId })
+    .from(participants)
+    .where(eq(participants.userId, session.user.id));
+
   return db.query.meetups.findMany({
-    where: eq(meetups.hostUserId, session.user.id),
+    where: or(eq(meetups.hostUserId, session.user.id), inArray(meetups.id, joined)),
     with: { participants: true, areas: true, votes: true },
     orderBy: [desc(meetups.createdAt)],
   });

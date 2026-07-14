@@ -2,9 +2,10 @@ import { createFileRoute, Link, Outlet, useRouterState, useSearch } from "@tanst
 import { AppTopbar } from "@/components/app-topbar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/user-avatar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useMeetupsListQuery } from "@/lib/api/hooks";
+import { useSession } from "@/lib/auth/auth-client";
 import { DeleteMeetupButton } from "@/components/DeleteMeetupButton";
 import { CalendarRange, MapPin, Plus, Users } from "lucide-react";
 
@@ -28,6 +29,7 @@ function MeetupsList() {
   const { tab = "all" } = useSearch({ from: "/_app/meetups" });
   const navigate = Route.useNavigate();
   const { data: meetups = [], isLoading } = useMeetupsListQuery();
+  const { data: session } = useSession();
   return (
     <>
       <AppTopbar title="Meetups" />
@@ -107,7 +109,15 @@ function MeetupsList() {
                         >
                           {m.status}
                         </Badge>
-                        <DeleteMeetupButton meetupId={m.id} meetupName={m.name} />
+                        {/* The list carries meetups you only joined, and deleting one is the
+                            host's call — the server rejects it anyway, so don't offer it. */}
+                        {session?.user && m.hostUserId === session.user.id ? (
+                          <DeleteMeetupButton meetupId={m.id} meetupName={m.name} />
+                        ) : (
+                          <Badge variant="outline" className="rounded-full text-[10px] font-medium">
+                            Joined
+                          </Badge>
+                        )}
                       </div>
                     </div>
                     <h3 className="mt-4 font-semibold text-lg group-hover:text-primary transition-colors">{m.name}</h3>
@@ -125,10 +135,14 @@ function MeetupsList() {
                     <div className="mt-5 pt-4 border-t border-border flex items-center justify-between">
                       <div className="flex -space-x-2">
                         {m.participants.slice(0, 4).map((mm) => (
-                          <Avatar key={mm.id} className="h-7 w-7 border-2 border-card">
-                            <AvatarImage src={mm.avatar ?? undefined} />
-                            <AvatarFallback className="text-xs">{mm.name[0]}</AvatarFallback>
-                          </Avatar>
+                          <UserAvatar
+                            key={mm.id}
+                            className="h-7 w-7 border-2 border-card"
+                            fallbackClassName="text-xs"
+                            name={mm.name}
+                            image={mm.avatar}
+                            seed={mm.id}
+                          />
                         ))}
                         {m.participants.length === 0 && (
                           <span className="text-xs text-muted-foreground flex items-center gap-1">
