@@ -32,7 +32,7 @@ import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
 import { clearMyParticipantId, getMyParticipantId, type MeetupStatus } from "@/lib/meetup-store";
 import { getTravelDistances } from "@/lib/api/places.functions";
-import { useMeetupQuery, useCastVote, useRemoveVote, useCalculateAreas, useFinalizeMeetup, useDeleteMeetup, useLeaveMeetup, useUpdateParticipant, useParticipantJoinNotifications } from "@/lib/api/hooks";
+import { useMeetupQuery, useCastVote, useRemoveVote, useCalculateAreas, useFinalizeMeetup, useDeleteMeetup, useLeaveMeetup, useUpdateParticipant, useParticipantJoinNotifications, useAutoClaimParticipant } from "@/lib/api/hooks";
 import { useSession } from "@/lib/auth/auth-client";
 import { ShareMeetupDialog } from "@/components/share-meetup-dialog";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
@@ -91,6 +91,9 @@ function MeetupResults() {
 
   // The host sits on this page after sharing the link, so joiners must announce themselves.
   useParticipantJoinNotifications(meetup);
+  // Joined as a guest, signed in later: link that old join to the account now so it shows up
+  // as an active meetup instead of staying invisible outside this one link.
+  useAutoClaimParticipant(meetup, id ? getMyParticipantId(id) : null, !!session?.user);
 
   const castVoteMutation = useCastVote();
   const removeVoteMutation = useRemoveVote();

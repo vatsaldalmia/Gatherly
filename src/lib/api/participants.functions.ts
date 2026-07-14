@@ -193,6 +193,38 @@ export const leaveMeetup = createServerFn({ method: "POST" })
     return { ok: true, remaining };
   });
 
+/**
+ * Links a participant row to the signed-in user's account, so the meetup starts showing up in
+ * their "active meetups" list.
+ *
+ * A join only writes `userId` when the joiner was already signed in at that moment — the invite
+ * link works with no account at all, so most joins have no session to attach. The common path is
+ * the opposite order: join as a guest, then sign up or log in afterward. The browser still
+ * remembers which participant row is "you" (see getMyParticipantId), so the next time that
+ * browser opens the meetup while signed in, this call closes the gap retroactively.
+ *
+ * Only claims an unclaimed row — never moves a participant that already belongs to someone else.
+ * That also makes this idempotent: calling it again once claimed is a no-op, not an error.
+ */
+export const claimParticipant = createServerFn({ method: "POST" })
+  .inputValidator(z.object({ meetupId: z.string(), participantId: z.string() }))
+  .handler(async ({ data }) => {
+    const session = await getSessionOptional();
+    if (!session?.user) return { ok: false };
+
+    const db = getDb();
+    const participant = await db.query.participants.findFirst({
+      where: and(eq(participants.id, data.participantId), eq(participants.meetupId, data.meetupId)),
+    });
+    if (!participant || participant.userId != null) return { ok: false };
+
+    await db
+      .update(participants)
+      .set({ userId: session.user.id, avatar: participant.avatar ?? session.user.image ?? null })
+      .where(eq(participants.id, data.participantId));
+    return { ok: true };
+  });
+
 export const updateParticipant = createServerFn({ method: "POST" })
   .inputValidator(
     z.object({

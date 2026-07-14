@@ -19,6 +19,7 @@ import {
   useAddParticipant,
   useLeaveMeetup,
   useParticipantJoinNotifications,
+  useAutoClaimParticipant,
 } from "@/lib/api/hooks";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
 import { describeCoords } from "@/lib/api/places.functions";
@@ -40,6 +41,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { AutoRickshaw } from "@/components/icons/auto-rickshaw";
+import { useSession } from "@/lib/auth/auth-client";
 
 export const Route = createFileRoute("/meetup/$id")({
   head: () => ({ meta: [{ title: "Join meetup — Gatherly" }] }),
@@ -66,6 +68,7 @@ function JoinMeetup() {
 
   // Someone who has joined tends to leave this page open; show them the group filling up.
   useParticipantJoinNotifications(meetup);
+  const { data: session } = useSession();
 
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
@@ -82,6 +85,10 @@ function JoinMeetup() {
     if (!id) return;
     setJoined(getMyParticipantId(id));
   }, [id]);
+
+  // Joined as a guest, signed in later (on this same link/device): link that old join to the
+  // account now so it stops being reachable only through this one URL.
+  useAutoClaimParticipant(meetup, joined, !!session?.user);
 
   // Order transport options by how many people already in this meetup picked each
   // mode — most-used first — so joiners see the group's common choices up top.

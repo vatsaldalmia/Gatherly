@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { listMeetups, getMeetup, createMeetup, deleteMeetup } from "./meetups.functions";
-import { addParticipant, updateParticipant, leaveMeetup } from "./participants.functions";
+import { addParticipant, updateParticipant, leaveMeetup, claimParticipant } from "./participants.functions";
 import { castVote, removeVote, finalizeMeetup } from "./votes.functions";
 import { calculateAreas } from "./fairness.functions";
 
@@ -110,6 +110,40 @@ export function useAddParticipant() {
       qc.invalidateQueries({ queryKey: meetupKeys.list() });
     },
   });
+}
+
+/**
+ * Retroactively links a participant row to the signed-in user's account, so a meetup joined
+ * as a guest — the common order, since the invite works with no account — starts showing up
+ * in "active meetups" the moment its joiner has one.
+ *
+ * Fires once per meetup, only when there's someone to link: a session, a participant this
+ * browser remembers as "me" (see getMyParticipantId), and that row not already tied to an
+ * account. On success it invalidates the list query, so the sidebar/dashboard picks the
+ * meetup up without a manual refresh.
+ */
+export function useAutoClaimParticipant(
+  meetup: { id: string; participants: { id: string; userId?: string | null }[] } | undefined,
+  myId: string | null,
+  hasSession: boolean,
+) {
+  const qc = useQueryClient();
+  const claimedFor = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!meetup || !myId || !hasSession) return;
+    if (claimedFor.current === meetup.id) return;
+    const mine = meetup.participants.find((p) => p.id === myId);
+    if (!mine || mine.userId) return;
+
+    claimedFor.current = meetup.id;
+    claimParticipant({ data: { meetupId: meetup.id, participantId: myId } }).then((result) => {
+      if (result.ok) {
+        qc.invalidateQueries({ queryKey: meetupKeys.detail(meetup.id) });
+        qc.invalidateQueries({ queryKey: meetupKeys.list() });
+      }
+    });
+  }, [meetup, myId, hasSession, qc]);
 }
 
 export function useLeaveMeetup() {
