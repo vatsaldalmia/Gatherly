@@ -111,8 +111,39 @@ bunx drizzle-kit push   # applies schema to a local dev.db file
 bun run dev             # http://localhost:8080
 ```
 
-Locally there is no Workers binding, so `getDb()` falls back to a SQLite file (`dev.db`).
 Phone-OTP prints the code to the server console in dev (no SMS needed).
+
+### Which database dev talks to
+
+`vite dev` runs on Node, where the Workers `DB` binding does not exist. `getDb()` therefore
+picks, in order:
+
+1. **The `DB` binding** — on Workers only. Always wins in production.
+2. **Remote D1 over its HTTP API** — if the three `CLOUDFLARE_*` vars are set (below).
+3. **`dev.db`** — a local SQLite file. The default when those vars are blank.
+
+To point local dev at the **real production D1**, set in `.env`:
+
+```bash
+CLOUDFLARE_ACCOUNT_ID=5754e0d443ea9e6c6f85407c605ebacf
+CLOUDFLARE_D1_DATABASE_ID=b72277cd-24d1-40f1-862f-2874482bf31a
+CLOUDFLARE_D1_API_TOKEN=<create one, see below>
+```
+
+Create the token at **dash.cloudflare.com → My Profile → API Tokens → Create Token → Custom
+token**, with the single permission **Account · D1 · Edit**. It is a real secret; `.env` is
+gitignored, keep it that way.
+
+⚠️ With those set, local dev **reads and writes production data** — a stray delete in dev is a
+production delete. Blank the token to drop back to `dev.db`.
+
+The HTTP path goes through drizzle's `sqlite-proxy` driver (`src/lib/db/d1-http.server.ts`),
+which posts SQL to D1's `/raw` endpoint. It is a network hop per query, so dev queries are
+slower than production's in-datacenter binding — correctness is identical, latency is not.
+Note it has no `batch()`/transaction support; nothing in the app uses them today.
+
+Server vars in `.env` reach dev only because `vite.config.ts` loads them into `process.env` —
+Vite itself exposes `VITE_*` to the client and nothing to the server.
 
 ---
 

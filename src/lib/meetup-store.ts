@@ -231,3 +231,10 @@ export function setMyParticipantId(meetupId: string, participantId: string) {
   if (typeof window === "undefined") return;
   localStorage.setItem(`gatherly:me:${meetupId}`, participantId);
 }
+
+// Called when leaving: the id now points at a deleted row, and leaving it behind would make
+// the invite link show "You're in!" to someone who is not.
+export function clearMyParticipantId(meetupId: string) {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(`gatherly:me:${meetupId}`);
+}

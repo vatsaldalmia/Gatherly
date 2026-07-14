@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { listMeetups, getMeetup, createMeetup, deleteMeetup } from "./meetups.functions";
-import { addParticipant, updateParticipant } from "./participants.functions";
+import { addParticipant, updateParticipant, leaveMeetup } from "./participants.functions";
 import { castVote, removeVote, finalizeMeetup } from "./votes.functions";
 import { calculateAreas } from "./fairness.functions";
 
@@ -105,6 +105,19 @@ export function useAddParticipant() {
     mutationFn: (input: Parameters<typeof addParticipant>[0]["data"]) =>
       addParticipant({ data: input }),
     // Joining changes the participant count the list view renders, not just the detail.
+    onSuccess: (_, vars) => {
+      qc.invalidateQueries({ queryKey: meetupKeys.detail(vars.meetupId) });
+      qc.invalidateQueries({ queryKey: meetupKeys.list() });
+    },
+  });
+}
+
+export function useLeaveMeetup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: Parameters<typeof leaveMeetup>[0]["data"]) => leaveMeetup({ data: input }),
+    // Leaving changes the participant count and can send the meetup back to "waiting", both of
+    // which the list view renders.
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: meetupKeys.detail(vars.meetupId) });
       qc.invalidateQueries({ queryKey: meetupKeys.list() });

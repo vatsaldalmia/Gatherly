@@ -10,7 +10,18 @@ import { AuthShell, SocialButtons } from "@/components/auth-shell";
 import { toast } from "sonner";
 import { signIn } from "@/lib/auth/auth-client";
 
+// Where to go after signing in. The value comes from the URL (`/login?redirect=…`), so it is
+// attacker-controllable: an absolute URL would turn our own login page into a redirector to any
+// site on the internet. Only same-site paths are honoured — and `//evil.com` is absolute
+// (protocol-relative) despite the leading slash, so it is rejected too.
+function safeRedirect(target: string | undefined): string {
+  if (!target || !target.startsWith("/") || target.startsWith("//")) return "/dashboard";
+  return target;
+}
+
 export const Route = createFileRoute("/login")({
+  validateSearch: (s: Record<string, unknown>): { redirect?: string } =>
+    typeof s.redirect === "string" ? { redirect: s.redirect } : {},
   head: () => ({
     meta: [
       { title: "Log in — Gatherly" },
@@ -25,6 +36,7 @@ export const Route = createFileRoute("/login")({
 
 function LoginPage() {
   const navigate = useNavigate();
+  const { redirect } = Route.useSearch();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,7 +48,7 @@ function LoginPage() {
       footer={
         <>
           Don't have an account?{" "}
-          <Link to="/signup" className="text-primary font-medium hover:underline">
+          <Link to="/signup" search={{ redirect }} className="text-primary font-medium hover:underline">
             Sign up
           </Link>
         </>
@@ -64,7 +76,7 @@ function LoginPage() {
               return;
             }
             toast.success("Welcome back!");
-            navigate({ to: "/dashboard" });
+            navigate({ to: safeRedirect(redirect) });
           } catch {
             toast.error("Something went wrong. Please try again.");
           } finally {

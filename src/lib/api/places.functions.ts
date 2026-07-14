@@ -1,7 +1,23 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
+import { reverseGeocode } from "../maps/geocoding.server";
 
 export type PlaceSuggestion = { placeId: string; description: string };
+
+/**
+ * Names the neighbourhood at a pair of browser-geolocation coordinates.
+ *
+ * Purely cosmetic: it gives "Use my location" something readable to put in the field.
+ * The coordinates themselves are what get stored and mapped, so a null here costs a
+ * nice label and nothing else — never gate a join on it.
+ */
+export const describeCoords = createServerFn({ method: "GET" })
+  .inputValidator(z.object({ lat: z.number(), lng: z.number() }))
+  .handler(async ({ data }): Promise<{ label: string | null }> => {
+    if (!process.env.GOOGLE_MAPS_API_KEY) return { label: null };
+    const label = await reverseGeocode(data.lat, data.lng).catch(() => null);
+    return { label };
+  });
 
 // Maps each transport option to how Google should route it:
 //  - bicycle / 2-wheeler  → "two_wheeler" (motorbike routing via the Routes API)

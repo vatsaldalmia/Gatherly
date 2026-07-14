@@ -15,7 +15,7 @@ import {
 import { AppTopbar } from "@/components/app-topbar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/user-avatar";
 import { FairnessScore } from "@/components/fairness-score";
 import { useMeetupsListQuery } from "@/lib/api/hooks";
 import { useSession } from "@/lib/auth/auth-client";
@@ -181,10 +181,14 @@ function Dashboard() {
                       </div>
                       <div className="flex -space-x-2 shrink-0">
                         {m.participants.slice(0, 4).map((p) => (
-                          <Avatar key={p.id} className="h-8 w-8 border-2 border-card">
-                            <AvatarImage src={p.avatar ?? undefined} />
-                            <AvatarFallback className="text-xs">{p.name[0]}</AvatarFallback>
-                          </Avatar>
+                          <UserAvatar
+                            key={p.id}
+                            className="h-8 w-8 border-2 border-card"
+                            fallbackClassName="text-xs"
+                            name={p.name}
+                            image={p.avatar}
+                            seed={p.id}
+                          />
                         ))}
                         {m.participants.length > 4 && (
                           <div className="h-8 w-8 rounded-full border-2 border-card bg-muted grid place-items-center text-xs font-medium">

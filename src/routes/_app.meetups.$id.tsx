@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { AppTopbar } from "@/components/app-topbar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/user-avatar";
 import { Progress } from "@/components/ui/progress";
 import { FairnessScore } from "@/components/fairness-score";
 import {
@@ -25,13 +25,14 @@ import {
   Trash2,
   Pencil,
   X,
+  LogOut,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { getMyParticipantId, type MeetupStatus } from "@/lib/meetup-store";
+import { clearMyParticipantId, getMyParticipantId, type MeetupStatus } from "@/lib/meetup-store";
 import { getTravelDistances } from "@/lib/api/places.functions";
-import { useMeetupQuery, useCastVote, useRemoveVote, useCalculateAreas, useFinalizeMeetup, useDeleteMeetup, useMeetupsListQuery, useUpdateParticipant, useParticipantJoinNotifications } from "@/lib/api/hooks";
+import { useMeetupQuery, useCastVote, useRemoveVote, useCalculateAreas, useFinalizeMeetup, useDeleteMeetup, useLeaveMeetup, useUpdateParticipant, useParticipantJoinNotifications } from "@/lib/api/hooks";
 import { useSession } from "@/lib/auth/auth-client";
 import { ShareMeetupDialog } from "@/components/share-meetup-dialog";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
@@ -87,7 +88,6 @@ function MeetupResults() {
   const navigate = useNavigate();
   const { data: meetup, isLoading, isFetching } = useMeetupQuery(id);
   const { data: session } = useSession();
-  const { data: myMeetups = [] } = useMeetupsListQuery();
 
   // The host sits on this page after sharing the link, so joiners must announce themselves.
   useParticipantJoinNotifications(meetup);
@@ -98,10 +98,12 @@ function MeetupResults() {
   const finalizeMutation = useFinalizeMeetup();
   const deleteMutation = useDeleteMeetup();
   const updateParticipantMutation = useUpdateParticipant();
+  const leaveMutation = useLeaveMeetup();
 
   const [shareOpen, setShareOpen] = useState(false);
   const [showRecs, setShowRecs] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
 
   const [editingAddress, setEditingAddress] = useState(false);
@@ -117,8 +119,9 @@ function MeetupResults() {
   }, [meetup?.status]);
 
   const myId = id ? getMyParticipantId(id) : null;
-  // isHost: reliable check — listMeetups is auth-gated and only returns the user's own meetups
-  const isHost = myMeetups.some((m) => m.id === id) || (!!session?.user && meetup?.hostUserId === session.user.id);
+  // Ownership, not membership: the meetups list now also carries meetups you merely joined, so
+  // "it's in my list" would hand a joiner the host's delete/calculate/finalize controls.
+  const isHost = !!session?.user && meetup?.hostUserId === session.user.id;
 
   const handleDelete = async () => {
     try {
@@ -160,6 +163,20 @@ function MeetupResults() {
     [me],
   );
   const myMode = me?.transport;
+
+  const handleLeave = async () => {
+    if (!me) return;
+    try {
+      await leaveMutation.mutateAsync({ meetupId: id, participantId: me.id });
+      // The stored id now points at a deleted row; leaving it behind would make the invite
+      // link tell them they're still in.
+      clearMyParticipantId(id);
+      setConfirmLeave(false);
+      toast.success("You've left this meetup.");
+    } catch {
+      toast.error("Couldn't leave the meetup. Please try again.");
+    }
+  };
 
   // Real road distance/time from the viewing user to each recommended area, via
   // Google Distance Matrix — keyed by area id. Falls back to null (then straight
@@ -347,15 +364,20 @@ function MeetupResults() {
           </div>
         </div>
 
+        {/* min-w-0 on the columns: grid items default to min-width:auto, so a single long
+            unbreakable string (the invite URL) would otherwise force the column wider than
+            the viewport and scroll the whole page sideways on a phone. */}
         <div className="grid lg:grid-cols-[1.4fr_1fr] gap-6 items-start">
-          <div className="space-y-6">
+          <div className="space-y-6 min-w-0">
             <section className="rounded-2xl border border-border bg-card shadow-card p-5 sm:p-6">
               <div className="flex items-start justify-between gap-4 flex-wrap">
-                <div className="min-w-0">
+                <div className="min-w-0 w-full sm:w-auto sm:flex-1">
                   <p className="text-xs uppercase tracking-wider text-muted-foreground">Share to invite</p>
-                  <p className="font-mono text-sm mt-1 truncate">{shareUrl}</p>
+                  {/* break-all, not truncate: the URL has no break opportunities, so nowrap
+                      would make it demand its full width and overflow the card on a phone. */}
+                  <p className="font-mono text-sm mt-1 break-all sm:truncate">{shareUrl}</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 shrink-0">
                   <Button variant="outline" size="sm" onClick={copyLink}>
                     <Copy className="h-3.5 w-3.5 mr-1.5" /> Copy
                   </Button>
@@ -528,7 +550,7 @@ function MeetupResults() {
             )}
           </div>
 
-          <aside className="space-y-6 lg:sticky lg:top-20">
+          <aside className="space-y-6 min-w-0 lg:sticky lg:top-20">
             <section className="rounded-2xl border border-border bg-card shadow-card p-5">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold flex items-center gap-2">
@@ -565,7 +587,7 @@ function MeetupResults() {
                   </div>
                 )}
                 {meetup.participants.map((m) => {
-                  const isMe = m.id === myId;
+                  const isMe = m.id === me?.id;
                   if (isMe && editingAddress) {
                     return (
                       <div key={m.id} className="rounded-xl border border-primary/30 bg-primary/5 p-3 space-y-2">
@@ -629,10 +651,7 @@ function MeetupResults() {
                   }
                   return (
                     <div key={m.id} className="flex items-center gap-3">
-                      <Avatar className="h-9 w-9">
-                        <AvatarImage src={m.avatar ?? undefined} />
-                        <AvatarFallback>{m.name[0]}</AvatarFallback>
-                      </Avatar>
+                      <UserAvatar className="h-9 w-9" name={m.name} image={m.avatar} seed={m.id} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{m.name}{isMe && <span className="ml-1 text-xs text-muted-foreground">(you)</span>}</p>
                         <p className="text-xs text-muted-foreground flex items-center gap-1 truncate">
@@ -640,18 +659,30 @@ function MeetupResults() {
                         </p>
                       </div>
                       {isMe ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
-                          onClick={() => {
-                            setEditAddr(m.address);
-                            setEditTransport(m.transport);
-                            setEditingAddress(true);
-                          }}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="flex items-center shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label="Edit your location"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-primary"
+                            onClick={() => {
+                              setEditAddr(m.address);
+                              setEditTransport(m.transport);
+                              setEditingAddress(true);
+                            }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label="Leave this meetup"
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => setConfirmLeave(true)}
+                          >
+                            <LogOut className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       ) : (
                         <Badge variant="outline" className="text-xs gap-1">
                           <CheckCircle2 className="h-3 w-3 text-mint" /> Joined
@@ -661,6 +692,45 @@ function MeetupResults() {
                   );
                 })}
               </div>
+
+              {me && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  {confirmLeave ? (
+                    <div className="space-y-2">
+                      <p className="text-xs text-muted-foreground">
+                        Leave this meetup? Your location and vote are removed, and the fair
+                        areas are recalculated without you. You can rejoin from the invite link.
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="h-8"
+                          disabled={leaveMutation.isPending}
+                          onClick={handleLeave}
+                        >
+                          {leaveMutation.isPending
+                            ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Leaving…</>
+                            : "Yes, leave"
+                          }
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-8" onClick={() => setConfirmLeave(false)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-full text-muted-foreground hover:text-destructive"
+                      onClick={() => setConfirmLeave(true)}
+                    >
+                      <LogOut className="h-3.5 w-3.5 mr-1.5" /> Leave meetup
+                    </Button>
+                  )}
+                </div>
+              )}
             </section>
 
             <section className="rounded-2xl border border-border bg-card shadow-card p-5">

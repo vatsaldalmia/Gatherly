@@ -4,17 +4,24 @@ import type { ComponentType, SVGProps } from "react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/user-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import {
+  clearMyParticipantId,
   getMyParticipantId,
   setMyParticipantId,
   TRANSPORT_OPTIONS,
   type TransportMode,
 } from "@/lib/meetup-store";
-import { useMeetupQuery, useAddParticipant, useParticipantJoinNotifications } from "@/lib/api/hooks";
+import {
+  useMeetupQuery,
+  useAddParticipant,
+  useLeaveMeetup,
+  useParticipantJoinNotifications,
+} from "@/lib/api/hooks";
 import { AddressAutocomplete } from "@/components/address-autocomplete";
+import { describeCoords } from "@/lib/api/places.functions";
 import {
   MapPin,
   Loader2,
@@ -28,6 +35,7 @@ import {
   CarTaxiFront,
   Users,
   CalendarRange,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -54,6 +62,7 @@ function JoinMeetup() {
   const { id } = useParams({ from: "/meetup/$id" });
   const { data: meetup, isLoading } = useMeetupQuery(id);
   const addParticipantMutation = useAddParticipant();
+  const leaveMutation = useLeaveMeetup();
 
   // Someone who has joined tends to leave this page open; show them the group filling up.
   useParticipantJoinNotifications(meetup);
@@ -61,6 +70,10 @@ function JoinMeetup() {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [placeId, setPlaceId] = useState<string | undefined>();
+  // Exact coordinates from the browser's geolocation. When set, these are sent as-is and
+  // the server skips geocoding entirely — the address text is then only a human label.
+  // Cleared whenever the user edits the address, so we never pin someone to stale coords.
+  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [transport, setTransport] = useState<TransportMode>("car");
   const [locating, setLocating] = useState(false);
   const [joined, setJoined] = useState<string | null>(null);
@@ -122,11 +135,28 @@ function JoinMeetup() {
     }
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
-      (pos) => {
+      async (pos) => {
         const { latitude, longitude } = pos.coords;
-        if (!address) setAddress(`Near ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+
+        // The coordinates are the answer — keep them. Google may not be able to name this
+        // spot (it often can't, off a mapped road), but an unnamed point still puts the
+        // pin in exactly the right place, which is all the fairness engine needs.
+        setCoords({ lat: latitude, lng: longitude });
+        setPlaceId(undefined);
+        setAddress(`Near ${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
         setLocating(false);
         toast.success("Location detected");
+
+        // Upgrade the placeholder to a neighbourhood name if Google knows one. Best-effort:
+        // a failure here leaves the coordinates untouched and the join still works.
+        try {
+          const { label } = await describeCoords({
+            data: { lat: latitude, lng: longitude },
+          });
+          if (label) setAddress(label);
+        } catch {
+          // Keep the lat/lng label.
+        }
       },
       () => {
         setLocating(false);
@@ -149,12 +179,31 @@ function JoinMeetup() {
         address: address.trim(),
         transport,
         placeId,
+        // Present only when "Use my location" was used and the address wasn't edited after.
+        // The server prefers these over geocoding the text, which is what makes an
+        // unnameable spot still land on the map.
+        lat: coords?.lat,
+        lng: coords?.lng,
       });
       setMyParticipantId(meetup.id, result.id);
       setJoined(result.id);
       toast.success("You're in!");
     } catch {
       toast.error("Failed to join. Please try again.");
+    }
+  };
+
+  const leave = async () => {
+    if (!joined) return;
+    try {
+      await leaveMutation.mutateAsync({ meetupId: meetup.id, participantId: joined });
+      // Forget the participant id before dropping back to the form, so the page doesn't greet
+      // the user with "You're in!" for a row that no longer exists.
+      clearMyParticipantId(meetup.id);
+      setJoined(null);
+      toast.success("You've left this meetup.");
+    } catch {
+      toast.error("Couldn't leave the meetup. Please try again.");
     }
   };
 
@@ -190,10 +239,14 @@ function JoinMeetup() {
                 </p>
                 <div className="flex -space-x-2">
                   {meetup.participants.slice(0, 8).map((p) => (
-                    <Avatar key={p.id} className="h-8 w-8 border-2 border-card">
-                      <AvatarImage src={p.avatar ?? undefined} />
-                      <AvatarFallback className="text-xs">{p.name[0]}</AvatarFallback>
-                    </Avatar>
+                    <UserAvatar
+                      key={p.id}
+                      className="h-8 w-8 border-2 border-card"
+                      fallbackClassName="text-xs"
+                      name={p.name}
+                      image={p.avatar}
+                      seed={p.id}
+                    />
                   ))}
                 </div>
               </div>
@@ -204,6 +257,18 @@ function JoinMeetup() {
             <Link to="/meetups/$id" params={{ id: meetup.id }} search={{ created: undefined }}>
               View meetup dashboard
             </Link>
+          </Button>
+
+          <Button
+            variant="ghost"
+            disabled={leaveMutation.isPending}
+            onClick={leave}
+            className="mt-2 w-full h-11 text-muted-foreground hover:text-destructive"
+          >
+            {leaveMutation.isPending
+              ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Leaving…</>
+              : <><LogOut className="h-4 w-4 mr-2" /> Leave meetup</>
+            }
           </Button>
         </main>
       </div>
@@ -229,10 +294,14 @@ function JoinMeetup() {
             <div className="mt-4 flex items-center justify-center gap-2">
               <div className="flex -space-x-2">
                 {meetup.participants.slice(0, 5).map((p) => (
-                  <Avatar key={p.id} className="h-7 w-7 border-2 border-background">
-                    <AvatarImage src={p.avatar ?? undefined} />
-                    <AvatarFallback className="text-[10px]">{p.name[0]}</AvatarFallback>
-                  </Avatar>
+                  <UserAvatar
+                    key={p.id}
+                    className="h-7 w-7 border-2 border-background"
+                    fallbackClassName="text-[10px]"
+                    name={p.name}
+                    image={p.avatar}
+                    seed={p.id}
+                  />
                 ))}
               </div>
               <span className="text-xs text-muted-foreground">{meetup.participants.length} already joined</span>
@@ -280,12 +349,19 @@ function JoinMeetup() {
             <AddressAutocomplete
               id="address"
               value={address}
-              onChange={(v) => { setAddress(v); setPlaceId(undefined); }}
-              onSelect={(desc, pid) => { setAddress(desc); setPlaceId(pid || undefined); }}
+              onChange={(v) => { setAddress(v); setPlaceId(undefined); setCoords(null); }}
+              onSelect={(desc, pid) => { setAddress(desc); setPlaceId(pid || undefined); setCoords(null); }}
               placeholder="Neighbourhood or address"
               required
             />
-            <p className="text-xs text-muted-foreground">We use this only to find a fair meetup point.</p>
+            {coords ? (
+              <p className="text-xs text-mint flex items-center gap-1">
+                <MapPin className="h-3 w-3 shrink-0" />
+                Pinned to your exact location ({coords.lat.toFixed(4)}, {coords.lng.toFixed(4)})
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">We use this only to find a fair meetup point.</p>
+            )}
           </div>
 
           <div className="space-y-2">

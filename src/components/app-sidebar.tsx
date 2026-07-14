@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/user-avatar";
 import { cn } from "@/lib/utils";
 import { useSession, signOut } from "@/lib/auth/auth-client";
 
@@ -25,9 +25,6 @@ export function AppSidebar() {
   const { data: session } = useSession();
   const navigate = useNavigate();
   const user = session?.user;
-  const initials = user?.name
-    ? user.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
-    : "ME";
 
   return (
     <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground sticky top-0 h-screen self-start">
@@ -84,12 +81,14 @@ export function AppSidebar() {
       {/* User footer */}
       <div className="p-3 border-t border-sidebar-border">
         <div className="group flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-sidebar-accent/60 transition-colors cursor-default">
-          <Avatar className="h-8 w-8 shrink-0 ring-2 ring-sidebar-border">
-            <AvatarImage src={user?.image ?? undefined} />
-            <AvatarFallback className="text-xs font-bold bg-gradient-primary text-primary-foreground">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
+          <UserAvatar
+            className="h-8 w-8 shrink-0 ring-2 ring-sidebar-border"
+            fallbackClassName="text-xs font-bold"
+            name={user?.name}
+            email={user?.email}
+            image={user?.image}
+            seed={user?.id}
+          />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold truncate leading-none">{user?.name ?? "You"}</p>
             <p className="text-[11px] text-sidebar-foreground/50 truncate mt-0.5">{user?.email ?? ""}</p>

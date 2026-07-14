@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import { signUp } from "@/lib/auth/auth-client";
 
 export const Route = createFileRoute("/signup")({
+  validateSearch: (s: Record<string, unknown>): { redirect?: string } =>
+    typeof s.redirect === "string" ? { redirect: s.redirect } : {},
   head: () => ({
     meta: [
       { title: "Sign up — Gatherly" },
@@ -25,6 +27,10 @@ export const Route = createFileRoute("/signup")({
 
 function SignupPage() {
   const navigate = useNavigate();
+  const { redirect } = Route.useSearch();
+  // Same rule as the login page: only same-site paths, so the URL can't bounce a new user off
+  // to another site right after they hand us a password.
+  const target = redirect && redirect.startsWith("/") && !redirect.startsWith("//") ? redirect : "/dashboard";
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -37,7 +43,7 @@ function SignupPage() {
       footer={
         <>
           Already have an account?{" "}
-          <Link to="/login" className="text-primary font-medium hover:underline">
+          <Link to="/login" search={{ redirect }} className="text-primary font-medium hover:underline">
             Log in
           </Link>
         </>
@@ -65,7 +71,7 @@ function SignupPage() {
               return;
             }
             toast.success("Welcome to Gatherly!");
-            navigate({ to: "/dashboard" });
+            navigate({ to: target });
           } catch {
             toast.error("Something went wrong. Please try again.");
           } finally {
