@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { requireSession } from "@/lib/auth/session.functions";
 import { useState } from "react";
 import { AppTopbar } from "@/components/app-topbar";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { Clock, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/explore")({
+  beforeLoad: ({ location }) => requireSession(location.href),
   head: () => ({ meta: [{ title: "Explore — Gatherly" }] }),
   component: ExplorePage,
 });

@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { requireSession } from "@/lib/auth/session.functions";
 import { AppTopbar } from "@/components/app-topbar";
 import { UserAvatar } from "@/components/user-avatar";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +9,7 @@ import { useMeetupsListQuery } from "@/lib/api/hooks";
 import { MapPin, Calendar, Users, CalendarRange } from "lucide-react";
 
 export const Route = createFileRoute("/_app/profile")({
+  beforeLoad: ({ location }) => requireSession(location.href),
   head: () => ({ meta: [{ title: "Profile — Gatherly" }] }),
   component: ProfilePage,
 });

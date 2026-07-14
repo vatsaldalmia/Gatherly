@@ -6,6 +6,7 @@ import { UserAvatar } from "@/components/user-avatar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useMeetupsListQuery } from "@/lib/api/hooks";
 import { useSession } from "@/lib/auth/auth-client";
+import { requireSession } from "@/lib/auth/session.functions";
 import { DeleteMeetupButton } from "@/components/DeleteMeetupButton";
 import { CalendarRange, MapPin, Plus, Users } from "lucide-react";
 
@@ -13,6 +14,11 @@ const TABS = ["all", "waiting", "ready", "voting", "finalized"] as const;
 type Tab = (typeof TABS)[number];
 
 export const Route = createFileRoute("/_app/meetups")({
+  // This route is also the layout for /meetups/$id, which stays open to anyone with the invite
+  // link — so guard the list itself, not everything nested under it.
+  beforeLoad: ({ location }) => {
+    if (location.pathname.replace(/\/$/, "") === "/meetups") return requireSession(location.href);
+  },
   head: () => ({ meta: [{ title: "Meetups — Gatherly" }] }),
   validateSearch: (s: Record<string, unknown>): { tab?: Tab } =>
     TABS.includes(s.tab as Tab) ? { tab: s.tab as Tab } : {},

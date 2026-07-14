@@ -328,9 +328,11 @@ function MeetupResults() {
       <AppTopbar title={meetup.name} />
       <main className="flex-1 px-4 sm:px-8 py-8 space-y-8">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <Button variant="ghost" size="sm" asChild>
+          {session?.user && (
+            <Button variant="ghost" size="sm" asChild>
             <Link to="/meetups"><ArrowLeft className="h-4 w-4 mr-1.5" /> All meetups</Link>
           </Button>
+          )}
           <div className="flex items-center gap-2">
             <div className={cn("inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium", statusInfo.cls)}>
               <StatusIcon className="h-3.5 w-3.5" /> {statusInfo.label}
@@ -444,23 +446,32 @@ function MeetupResults() {
                       : `Need ${2 - meetup.participants.length} more participant${2 - meetup.participants.length === 1 ? "" : "s"} before we can calculate.`}
                   </p>
                 </div>
-                <Button
-                  disabled={!canCalc || calculateAreasMutation.isPending}
-                  onClick={findBestArea}
-                  className="bg-gradient-primary shadow-elegant hover:opacity-90"
-                >
-                  {calculateAreasMutation.isPending ? (
-                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Calculating…</>
-                  ) : (
-                    <><Sparkles className="h-4 w-4 mr-2" /> Find best area</>
-                  )}
-                </Button>
+                {/* Calculating needs an account (the server requires one). A guest here on an
+                    invite link can still join and vote — the host runs this. */}
+                {session?.user ? (
+                  <Button
+                    disabled={!canCalc || calculateAreasMutation.isPending}
+                    onClick={findBestArea}
+                    className="bg-gradient-primary shadow-elegant hover:opacity-90"
+                  >
+                    {calculateAreasMutation.isPending ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Calculating…</>
+                    ) : (
+                      <><Sparkles className="h-4 w-4 mr-2" /> Find best area</>
+                    )}
+                  </Button>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    {meetup.hostName} will calculate the fairest spots — you'll be able to vote on
+                    them right here.
+                  </p>
+                )}
               </section>
             ) : (
               <section className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold">Recommended areas</h3>
-                  {meetup.status === "voting" && winner && (
+                  {meetup.status === "voting" && winner && session?.user && (
                     <Button size="sm" variant="outline" onClick={finalize} disabled={finalizeMutation.isPending}>
                       <Trophy className="h-3.5 w-3.5 mr-1.5" /> Finalize {winner.name}
                     </Button>

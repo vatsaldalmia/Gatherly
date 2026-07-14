@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { requireSession } from "@/lib/auth/session.functions";
 import {
   ArrowUpRight,
   CalendarRange,
@@ -24,6 +25,7 @@ import type { ParticipantPin, SearchedPlace } from "@/components/TestMap";
 const TestMap = lazy(() => import("@/components/TestMap"));
 
 export const Route = createFileRoute("/_app/dashboard")({
+  beforeLoad: ({ location }) => requireSession(location.href),
   head: () => ({ meta: [{ title: "Dashboard — Gatherly" }] }),
   component: Dashboard,
 });

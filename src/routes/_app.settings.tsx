@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { requireSession } from "@/lib/auth/session.functions";
 import { useState } from "react";
 import { AppTopbar } from "@/components/app-topbar";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/settings")({
+  beforeLoad: ({ location }) => requireSession(location.href),
   head: () => ({ meta: [{ title: "Settings — Gatherly" }] }),
   component: SettingsPage,
 });

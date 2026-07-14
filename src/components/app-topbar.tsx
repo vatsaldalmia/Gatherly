@@ -20,15 +20,22 @@ export function AppTopbar({ title }: { title?: string }) {
         <Button variant="ghost" size="icon" aria-label="Notifications">
           <Bell className="h-4 w-4" />
         </Button>
-        <Link to="/profile">
-          <UserAvatar
-            className="h-9 w-9 ring-2 ring-border"
-            name={user?.name}
-            email={user?.email}
-            image={user?.image}
-            seed={user?.id}
-          />
-        </Link>
+        {/* A guest on an invite link has no profile to open — offer the way in instead. */}
+        {user ? (
+          <Link to="/profile">
+            <UserAvatar
+              className="h-9 w-9 ring-2 ring-border"
+              name={user.name}
+              email={user.email}
+              image={user.image}
+              seed={user.id}
+            />
+          </Link>
+        ) : (
+          <Button asChild size="sm" className="h-9">
+            <Link to="/login" search={{ redirect: undefined }}>Log in</Link>
+          </Button>
+        )}
       </div>
     </header>
   );

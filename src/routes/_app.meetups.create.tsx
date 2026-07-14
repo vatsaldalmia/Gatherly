@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { requireSession } from "@/lib/auth/session.functions";
 import { useState } from "react";
 import { AppTopbar } from "@/components/app-topbar";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ import { AutoRickshaw } from "@/components/icons/auto-rickshaw";
 import type { ComponentType, SVGProps } from "react";
 
 export const Route = createFileRoute("/_app/meetups/create")({
+  beforeLoad: ({ location }) => requireSession(location.href),
   head: () => ({ meta: [{ title: "Create meetup — Gatherly" }] }),
   component: CreateMeetup,
 });

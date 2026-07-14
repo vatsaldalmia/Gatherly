@@ -34,6 +34,7 @@ export function AppSidebar() {
       </div>
 
       {/* New meetup CTA */}
+      {user && (
       <div className="px-3 pt-4 pb-2">
         <Button
           asChild
@@ -44,10 +45,11 @@ export function AppSidebar() {
           </Link>
         </Button>
       </div>
+      )}
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-2 space-y-0.5">
-        {items.map((item) => {
+        {(user ? items : []).map((item) => {
           const active =
             item.url === "/dashboard"
               ? pathname === "/dashboard"
@@ -78,8 +80,18 @@ export function AppSidebar() {
         })}
       </nav>
 
-      {/* User footer */}
+      {/* User footer — or a way in, for someone here on an invite link with no account */}
       <div className="p-3 border-t border-sidebar-border">
+        {!user ? (
+          <div className="space-y-2">
+            <p className="px-2 text-[11px] text-sidebar-foreground/50">
+              You're viewing this as a guest.
+            </p>
+            <Button asChild size="sm" className="w-full h-9 rounded-xl">
+              <Link to="/login" search={{ redirect: pathname }}>Log in</Link>
+            </Button>
+          </div>
+        ) : (
         <div className="group flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-sidebar-accent/60 transition-colors cursor-default">
           <UserAvatar
             className="h-8 w-8 shrink-0 ring-2 ring-sidebar-border"
@@ -106,6 +118,7 @@ export function AppSidebar() {
             <LogOut className="h-3.5 w-3.5" />
           </Button>
         </div>
+        )}
       </div>
     </aside>
   );

@@ -1,18 +1,10 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
 import { AppSidebar } from "@/components/app-sidebar";
-import { fetchSession } from "@/lib/auth/session.functions";
 
+// No guard here on purpose. This layout also wraps the meetup page, which anyone holding the
+// invite link must be able to open — see requireSession() in lib/auth/session.functions.ts.
+// The private pages under it guard themselves.
 export const Route = createFileRoute("/_app")({
-  beforeLoad: async ({ location }) => {
-    const session = await fetchSession();
-    if (!session) {
-      // Carry the page they were trying to reach through the login, so signing in lands them
-      // there rather than on the dashboard. Following an invite link into a meetup used to
-      // mean logging in and then having to find your way back to it by hand.
-      throw redirect({ to: "/login", search: { redirect: location.href } });
-    }
-    return { session };
-  },
   component: AppLayout,
 });
 
