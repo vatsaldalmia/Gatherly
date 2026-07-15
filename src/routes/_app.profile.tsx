@@ -1,12 +1,12 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { requireSession } from "@/lib/auth/session.functions";
 import { AppTopbar } from "@/components/app-topbar";
 import { UserAvatar } from "@/components/user-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { useSession } from "@/lib/auth/auth-client";
+import { useSession, signOut } from "@/lib/auth/auth-client";
 import { useMeetupsListQuery } from "@/lib/api/hooks";
-import { MapPin, Calendar, Users, CalendarRange } from "lucide-react";
+import { MapPin, Calendar, Users, CalendarRange, LogOut } from "lucide-react";
 
 export const Route = createFileRoute("/_app/profile")({
   beforeLoad: ({ location }) => requireSession(location.href),
@@ -17,7 +17,13 @@ export const Route = createFileRoute("/_app/profile")({
 function ProfilePage() {
   const { data: session } = useSession();
   const { data: meetups = [] } = useMeetupsListQuery();
+  const navigate = useNavigate();
   const user = session?.user;
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate({ to: "/login" });
+  };
 
   const name = user?.name ?? "You";
   const email = user?.email ?? "";
@@ -60,9 +66,14 @@ function ProfilePage() {
                   </div>
                 )}
               </div>
-              <Button variant="outline" asChild>
-                <Link to="/settings">Edit profile</Link>
-              </Button>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button variant="outline" asChild>
+                  <Link to="/settings">Edit profile</Link>
+                </Button>
+                <Button variant="ghost" className="text-muted-foreground hover:text-destructive" onClick={handleLogout}>
+                  <LogOut className="h-4 w-4 mr-1.5" /> Log out
+                </Button>
+              </div>
             </div>
           </div>
         </div>

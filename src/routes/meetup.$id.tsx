@@ -219,8 +219,15 @@ function JoinMeetup() {
     const me = meetup.participants.find((p) => p.id === joined);
     return (
       <div className="min-h-screen bg-background">
-        <header className="px-5 py-4 border-b border-border flex items-center">
+        <header className="px-5 py-4 border-b border-border flex items-center justify-between">
           <Logo />
+          {/* Not required — the invite works with no account — but useful if this person
+              already has one, since it's what links this join to it. */}
+          {!session?.user && (
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/login" search={{ redirect: `/meetup/${id}` }}>Log in</Link>
+            </Button>
+          )}
         </header>
         <main className="max-w-md mx-auto px-5 py-16 text-center">
           <div className="mx-auto h-20 w-20 rounded-full bg-gradient-primary grid place-items-center shadow-elegant">
@@ -286,7 +293,16 @@ function JoinMeetup() {
     <div className="min-h-screen bg-background">
       <header className="px-5 py-4 border-b border-border flex items-center justify-between sticky top-0 bg-background/90 backdrop-blur z-10">
         <Logo />
-        <Badge variant="secondary" className="rounded-full text-xs">Invite link</Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="rounded-full text-xs">Invite link</Badge>
+          {/* Optional: joining needs no account, but logging in first means this join is
+              yours from the start rather than getting linked the next time you visit. */}
+          {!session?.user && (
+            <Button variant="ghost" size="sm" className="h-7 text-xs px-2" asChild>
+              <Link to="/login" search={{ redirect: `/meetup/${id}` }}>Log in</Link>
+            </Button>
+          )}
+        </div>
       </header>
 
       <main className="max-w-md mx-auto px-5 py-8 pb-36">
