@@ -54,7 +54,7 @@ function LoginPage() {
         </>
       }
     >
-      <SocialButtons />
+      <SocialButtons callbackURL={safeRedirect(redirect)} />
 
       <div className="relative my-1">
         <div className="absolute inset-0 flex items-center">

@@ -61,12 +61,12 @@ export function AuthShell({
   );
 }
 
-export function SocialButtons() {
+export function SocialButtons({ callbackURL = "/dashboard" }: { callbackURL?: string }) {
   const [loading, setLoading] = useState(false);
 
   const handleGoogle = async () => {
     setLoading(true);
-    await signIn.social({ provider: "google", callbackURL: "/dashboard" });
+    await signIn.social({ provider: "google", callbackURL });
     setLoading(false);
   };
 
